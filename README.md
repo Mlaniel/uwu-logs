@@ -1,74 +1,47 @@
-# UwU Logs
+# Svelte + TS + Vite
 
-<https://uwu-logs.xyz/>
+This template should help get you started developing with Svelte and TypeScript in Vite.
 
-UwU Logs is a World of Warcraft combat log parser.
+## Recommended IDE Setup
 
-Supports any Wrath of the Lich King (3.3.5) server.
+[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
 
-❤️ Inspired by World of Logs, LegacyPlayers and Warcraft Logs.
+## Need an official Svelte framework?
 
-## Self hosting
+Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
 
-- Install packages from `requirements.txt`
+## Technical considerations
 
-- Run Z_SERVER.py
+**Why use this over SvelteKit?**
 
-- Visit <http://localhost:5000/>
+- It brings its own routing solution which might not be preferable for some users.
+- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
 
-#### Optional:
+This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
 
-- Spell/classes icon data - [download](https://drive.google.com/file/d/17DyiCJts01CkFIkd0-G1dVAypIlxd0pP) and extract to root folder.
+Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
 
-## Showcase
+**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
 
-### Top
+Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
 
-<https://uwu-logs.xyz/top>
+**Why include `.vscode/extensions.json`?**
 
-![Showcase top](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/static/thumb.png)
+Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
 
-### PvE Statistics
+**Why enable `allowJs` in the TS template?**
 
-<https://uwu-logs.xyz/top_stats>
+While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
 
-![Showcase PvE statistics](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/showcase/pve_stats.png)
+**Why is HMR not preserving my local component state?**
 
-### Player total and per target spell info
+HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
 
-![Showcase player spell info](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/showcase/spell_info.png)
+If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
 
-### Damage to targets + useful
-
-![Showcase useful](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/showcase/useful.png)
-
-### Player comparison
-
-![Showcase comparison](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/showcase/compare.png)
-
-### Spell search and overall info
-
-![Showcase spell search](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/showcase/spells.png)
-
-### Consumables
-
-![Showcase consumables](https://raw.githubusercontent.com/Ridepad/uwu-logs/main/showcase/consume.png)
-
-## TODO
-
-- friendly fire: Bloodbolt Splash, ucm, vortex
-- self harm: ucm, Chilled to the Bone
-- deaths
-- dmg taken
-- site side logs parser - filter forms - guid spell etc
-
-- spirit explosion - triggered by
-- portal stacks
-- valk grabs + necrotic + defile targets
-
-- fix unlogical buff duration max 30 sec? last combat log entry? filter out long spells - ff hmark
-- if buff not in long_buffs check top50% avg of this buff
-
-- add summary stats like max hit done max hit taken max absorb max grabs
-- finish absorbs KEKW
-- 1 tick total - all targets dmg from 1 hurricane tick or typhoon
+```ts
+// store.ts
+// An extremely simple external store
+import { writable } from 'svelte/store'
+export default writable(0)
+```
