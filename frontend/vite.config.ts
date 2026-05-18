@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:5000',
+      '/static': 'http://localhost:5000',
       '/top': 'http://localhost:5020',
       '/pve_stats': 'http://localhost:5020',
       '/character': 'http://localhost:5020',
