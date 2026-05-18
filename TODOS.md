@@ -8,11 +8,11 @@
   - **Where to start:** Change `PlayerTable.vue` plan reference from v-memo to RecycleScroller. Item height: 36px. Do NOT use v-memo inside RecycleScroller (display corruption).
   - **Depends on:** vue-virtual-scroller TS compatibility verified (see below).
 
-- [ ] **Add GET /apiv2/recent_reports/ to Z_SERVER.py (Phase 1)**
+- [ ] **Add GET /api/v2/recent_reports/ to Z_SERVER.py (Phase 1)**
   - **What:** New endpoint returning last N public report summaries: `[{ id, name, server, boss_count, latest_boss, date }]`. Used by the home page recent logs feed.
   - **Why:** Home page (/) shows "recent public logs" below the upload CTA. Without this endpoint, the home page has no dynamic content.
-  - **Where to start:** Add to `Z_SERVER.py` alongside other new `/apiv2/` routes. Query the existing report cache/storage (same source as `logs_list`). Return JSON, no auth needed (public logs only).
-  - **Depends on:** /apiv2/ Blueprint scaffolded.
+  - **Where to start:** Add to `Z_SERVER.py` alongside other new `/api/v2/` routes. Query the existing report cache/storage (same source as `logs_list`). Return JSON, no auth needed (public logs only). **Do not modify or remove any existing routes.**
+  - **Depends on:** /api/v2/ Blueprint scaffolded.
 
 ## Pre-Phase-1b
 

@@ -313,5 +313,5 @@ Upload-first with recent logs feed:
   └────────────────────────────────────────────────────┘
 ```
 
-Requires `GET /apiv2/recent_reports/` endpoint (Phase 1, add to Z_SERVER.py).
+Requires `GET /api/v2/recent_reports/` endpoint (Phase 1, add to Z_SERVER.py).
 Returns: `[{ id, name, server, boss_count, latest_boss, date }]`

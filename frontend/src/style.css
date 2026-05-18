@@ -1,0 +1,314 @@
+/* ─── Design tokens ─────────────────────────────────────────────────────── */
+
+:root {
+  --hue: 271;
+
+  /* Primary accent */
+  --primary:        hsl(271, 76%, 53%);
+  --primary-dim:    hsl(271, 100%, 40%);
+  --primary-bright: hsl(271, 100%, 50%);
+
+  /* Surfaces */
+  --background:     #000000;
+  --surface:        hsl(271, 20%, 6%);
+
+  /* Text */
+  --text:           gainsboro;
+  --text-muted:     hsl(0, 0%, 37%);
+  --link:           hsl(271, 40%, 86%);
+  --link-hover:     hsl(271, 100%, 70%);
+
+  /* Table */
+  --table-border:   hsl(0, 0%, 8%);
+  --hover-row:      hsl(271, 100%, 5%);
+
+  /* Boss outcome indicators */
+  --kill:           aquamarine;
+  --wipe:           crimson;
+
+  /* Spec filter */
+  --spec-selected-outline:   2px solid var(--primary);
+  --spec-unselected-opacity: 0.35;
+  --healer-row-opacity:      0.35;
+
+  /* Nav height */
+  --nav-height: 2.5rem;
+
+  /* Sidebar */
+  --sidebar-width: 220px;
+}
+
+/* ─── Reset & base ──────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  color: var(--text);
+  font-family: 'Barlow', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--link-hover);
+}
+
+/* ─── Typography helpers ────────────────────────────────────────────────── */
+
+/* Nav labels, column headers, tab labels, uppercase UI */
+.label,
+nav,
+th,
+.tab-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* All number columns */
+td.number,
+.dps-value,
+.rank-value {
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+/* ─── WoW class colors ──────────────────────────────────────────────────── */
+/* Game-standard. Do not change. */
+
+.death-knight { color: crimson }
+.mage         { color: lightskyblue }
+.shaman       { color: hsl(221, 100%, 50%) }
+.rogue        { color: gold }
+.hunter       { color: yellowgreen }
+.paladin      { color: violet }
+.priest       { color: whitesmoke }
+.warrior      { color: sienna }
+.druid        { color: darkorange }
+.warlock      { color: slateblue }
+
+/* ─── Parse rank colors ─────────────────────────────────────────────────── */
+/* WarcraftLogs standard. Do not change. */
+
+.top100 { color: #e5cc80 }
+.top99  { color: #e268a8 }
+.top95  { color: #ff8000 }
+.top90  { color: #ff3c00 }
+.top75  { color: #a335ee }
+.top50  { color: #0070ff }
+.top25  { color: #1eff00 }
+.top0   { color: #666666 }
+
+/* ─── Spell school colors ───────────────────────────────────────────────── */
+
+.holy         { color: goldenrod }
+.fire         { color: orangered }
+.nature       { color: hsl(120, 100%, 35%) }
+.frost        { color: skyblue }
+.shadow       { color: darkslateblue }
+.arcane       { color: mediumpurple }
+.froststrike  { color: lightgray }
+.frostfire    { color: indianred }
+.shadowstrike { color: rebeccapurple }
+.shadowstorm  { color: teal }
+.shadowfrost  { color: slateblue }
+.divine       { color: violet }
+.spellshadow  { color: purple }
+.firestorm    { color: hsl(85, 100%, 40%) }
+.shadowlight  { color: hsl(40, 75%, 30%) }
+.chaos        { color: hsl(263, 100%, 30%) }
+.holyfire     { color: hsl(50, 100%, 80%) }
+.froststorm   { color: hsl(200, 100%, 85%) }
+.spellfire    { color: hsl(345, 100%, 50%) }
+.stormstrike  { color: hsl(120, 100%, 20%) }
+.flamestrike  { color: hsl(345, 100%, 30%) }
+.holystorm, .holyfrost, .shadowflame, .spellstrike, .spellstorm,
+.spellfrost, .elemental, .chromatic, .magic { color: hsla(0, 0%, 50%, 0.5) }
+
+/* ─── App shell ─────────────────────────────────────────────────────────── */
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Navigation ────────────────────────────────────────────────────────── */
+
+.nav {
+  height: var(--nav-height);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  gap: 1.5rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-logo {
+  color: var(--primary-bright);
+  font-size: 15px;
+  margin-right: 0.5rem;
+}
+
+.nav a {
+  color: var(--text-muted);
+}
+.nav a:hover,
+.nav a.router-link-active {
+  color: var(--text);
+}
+
+/* ─── Page layout (sidebar + main) ─────────────────────────────────────── */
+
+.page-shell {
+  display: flex;
+  margin-top: var(--nav-height);
+  min-height: calc(100vh - var(--nav-height));
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--surface);
+  position: fixed;
+  top: var(--nav-height);
+  left: 0;
+  bottom: 0;
+  overflow-y: auto;
+  padding-bottom: 1rem;
+}
+
+.main-content {
+  margin-left: var(--sidebar-width);
+  flex: 1;
+  min-width: 0;
+  padding: 1rem;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 90;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .main-content {
+    margin-left: 0;
+  }
+}
+
+/* ─── Tables ────────────────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--table-border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th:hover { color: var(--text); }
+
+td {
+  padding: 0 8px;
+  height: 36px;
+  border-bottom: 1px solid var(--table-border);
+  white-space: nowrap;
+}
+
+tr:hover td {
+  background: var(--hover-row);
+}
+
+td.number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+}
+
+/* ─── Tab bar ───────────────────────────────────────────────────────────── */
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--table-border);
+  margin-bottom: 0.5rem;
+}
+
+.tab-bar button {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tab-bar button:hover { color: var(--text); }
+
+.tab-bar button.active {
+  color: var(--text);
+  border-bottom-color: var(--primary);
+}
+
+/* ─── Skeleton loading ──────────────────────────────────────────────────── */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface) 25%,
+    hsl(271, 20%, 9%) 50%,
+    var(--surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 2px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0 }
+  100% { background-position: -200% 0 }
+}

@@ -1,11 +1,14 @@
 from datetime import datetime
 
+import os
+
 from flask import (
     Flask, request,
     make_response,
     redirect,
     render_template,
     send_file,
+    send_from_directory,
 )
 
 from werkzeug.exceptions import (
@@ -37,6 +40,9 @@ except ImportError:
 
 SERVER = Flask(__name__)
 SERVER.wsgi_app = ProxyFix(SERVER.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+from api_v2 import apiv2_bp
+SERVER.register_blueprint(apiv2_bp)
 SERVER.jinja_env.trim_blocks = True
 SERVER.jinja_env.lstrip_blocks = True
 
@@ -649,6 +655,26 @@ def raid_calendar():
 #         len=len,
 #     )
 
+
+
+# ─── SPA catch-all ────────────────────────────────────────────────────────────
+# Must be the LAST route registered. Flask matches specific routes first, so
+# all /reports/<id>/, /ladder, /logs_list, etc. above still win.
+# phase1_legacy: paths that still have active Flask template routes — exclude
+#   from SPA until their Vue views are built (Phase 2).
+# never_spa: API, static files, direct downloads — never serve index.html.
+
+_PHASE1_LEGACY = ("logs_list", "ladder", "raid_calendar", "protected")
+_NEVER_SPA = ("api/", "static/", "pw_validate", "favicon", "download")
+_SPA_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
+@SERVER.route("/<path:path>")
+def serve_spa(path):
+    if path and any(path.startswith(p) for p in _PHASE1_LEGACY + _NEVER_SPA):
+        return render_template("404.html"), 404
+    if not os.path.isdir(_SPA_DIST):
+        return "Frontend not built. Run: cd frontend && npm run build", 503
+    return send_from_directory(_SPA_DIST, "index.html")
 
 
 if __name__ == "__main__":

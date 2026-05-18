@@ -30,3 +30,7 @@ temp/
 top/
 uploads/
 venv/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
