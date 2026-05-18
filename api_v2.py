@@ -190,6 +190,51 @@ def report_deaths(report_id: str):
     return jsonify(data)
 
 
+# ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
+# Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
+# Returns JSON from get_spell_history_wrap_json — already serialized.
+
+@apiv2_bp.route("/reports/<report_id>/timeline", methods=["POST"])
+def report_timeline(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    body = request.get_json(force=True, silent=True) or {}
+    boss_name_html = body.get("boss")
+    player_name = body.get("name")
+    attempt_raw = body.get("attempt", 0)
+
+    if not boss_name_html:
+        return jsonify({"error": "Missing 'boss' in request body"}), 400
+    if not player_name:
+        return jsonify({"error": "Missing 'name' in request body"}), 400
+
+    boss_name = BOSSES_FROM_HTML.get(boss_name_html, boss_name_html)
+
+    try:
+        attempt_n = int(attempt_raw)
+    except (ValueError, TypeError):
+        return jsonify({"error": f"'attempt' must be an integer, got {attempt_raw!r}"}), 400
+
+    try:
+        boss_data = report.ENCOUNTER_DATA[boss_name]
+    except KeyError:
+        return jsonify({"error": f"Boss '{boss_name}' not found in report"}), 404
+
+    try:
+        s, f = boss_data[attempt_n]
+    except IndexError:
+        return jsonify({"error": f"Attempt {attempt_n} not found for '{boss_name}'"}), 404
+
+    player_guid = report.name_to_guid(player_name)
+    if not player_guid:
+        return jsonify({"error": f"Player '{player_name}' not found in report"}), 404
+
+    # Returns a pre-serialized JSON string — pass through directly.
+    return report.get_spell_history_wrap_json(s, f, player_guid), 200, {"Content-Type": "application/json"}
+
+
 # ─── SPA catch-all (add last in Z_SERVER.py, not here) ───────────────────────
 # See the comment in Z_SERVER.py — the catch-all must be the very last route
 # registered on the main app, after all blueprints are registered.

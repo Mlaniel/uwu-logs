@@ -90,6 +90,10 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
             class="tab-link"
           >Deaths</router-link>
           <router-link
+            :to="`/reports/${reportId}/timeline`"
+            class="tab-link"
+          >Timeline</router-link>
+          <router-link
             :to="`/reports/${reportId}/compare`"
             class="tab-link"
           >Compare</router-link>

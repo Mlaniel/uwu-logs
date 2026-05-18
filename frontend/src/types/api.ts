@@ -132,6 +132,21 @@ export interface DeathEntry {
   death: DeathLogLine[]
 }
 
+// ── Timeline ─────────────────────────────────────────────────────────────────
+
+// One cast event: [delta_ms, flag, source_name, target_name, target_guid, etc_str]
+export type CastEvent = [number, string, string, string, string, string]
+
+// Response from POST /api/v2/reports/:id/timeline
+// DATA keys are spell_id strings; values are arrays of CastEvent.
+export interface TimelineApiResponse {
+  DATA: Record<string, CastEvent[]>
+  SPELLS: Record<string, SpellInfo>
+  RDURATION: number      // fight duration in seconds
+  NAME: string           // player name
+  CLASS: string          // class name (lowercase)
+}
+
 // Response from GET /api/v2/reports/:id/deaths/
 export interface DeathApiResponse {
   DEATHS: Record<string, DeathEntry>    // key: "seconds-playername"

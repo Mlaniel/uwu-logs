@@ -3,6 +3,7 @@ import Home from '../views/Home.vue'
 import Report from '../views/Report.vue'
 import Player from '../views/Player.vue'
 import Deaths from '../views/Deaths.vue'
+import Timeline from '../views/Timeline.vue'
 import Compare from '../views/Compare.vue'
 import NotFound from '../views/NotFound.vue'
 
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: '/reports/:id', component: Report },
     { path: '/reports/:id/player/:name', component: Player },
     { path: '/reports/:id/deaths', component: Deaths },
+    { path: '/reports/:id/timeline', component: Timeline },
     { path: '/reports/:id/compare', component: Compare },
     { path: '/:pathMatch(.*)*', component: NotFound },
   ],
