@@ -15,6 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   sort: [key: SortKey]
+  'player-click': [name: string]
 }>()
 
 function rankClass(pct: number): string {
@@ -91,6 +92,7 @@ function getStatCell(player: Player) {
         <div
           class="player-row"
           :class="{ healer: player.useful === null && view === 'damage' }"
+          @click="emit('player-click', player.name)"
         >
           <div class="col-spec">
             <img
@@ -164,6 +166,10 @@ function getStatCell(player: Player) {
 }
 
 .table-header > div:hover { color: var(--text); }
+
+.player-row {
+  cursor: pointer;
+}
 
 .player-row:hover {
   background: var(--hover-row);

@@ -76,3 +76,67 @@ export interface RecentReport {
   latest_boss: string
   date: string
 }
+
+// ── Phase 1b types ──────────────────────────────────────────────────────────
+
+// Spell metadata from Spell.to_dict() in logs_spells_list.py.
+// color is a CSS color string (matches spell school color classes).
+export interface SpellInfo {
+  id: string
+  name: string
+  color: string
+  icon: string
+}
+
+// Target groups from _order_targets(): each value is { target_id: display_name }.
+export interface TargetGroups {
+  NPCS: Record<string, string>
+  Players: Record<string, string>
+  Pets: Record<string, string>
+}
+
+// Response from GET /api/v2/reports/:id/player/:name/
+// ACTUAL/CASTS keys are spell_id strings. Values are formatted strings ("1 234 567").
+export interface PlayerApiResponse {
+  SOURCE_NAME: string
+  IS_PLAYER: boolean
+  SOURCE: string
+  OWNER_NAME?: string
+  ACTUAL: Record<string, string>
+  ACTUAL_PERCENT: Record<string, number>
+  CASTS: Record<string, string>
+  SPELLS_DATA: Record<string, SpellInfo>
+  TARGETS: TargetGroups
+  PETS: Record<string, string>          // pet_guid → pet_name
+}
+
+// One spell row assembled from PlayerApiResponse for SpellTable display.
+export interface SpellRow {
+  spell_id: string
+  name: string
+  icon: string
+  color: string
+  actual: string
+  percent: number
+  casts: string
+}
+
+// One death entry from get_deaths_v2_wrap(). The `death` field is a list of
+// normalized combat log lines: [timestamp, flag_part1, flag_part2, source,
+//   spell_id, spell_name, amount?, ...extra]
+export type DeathLogLine = (string | number)[]
+
+export interface DeathEntry {
+  player: string
+  from_start: string           // "MM:SS.mmm"
+  death: DeathLogLine[]
+}
+
+// Response from GET /api/v2/reports/:id/deaths/
+export interface DeathApiResponse {
+  DEATHS: Record<string, DeathEntry>    // key: "seconds-playername"
+  CLASSES: Record<string, string>       // guid → class_name
+  PLAYERS: Record<string, string>       // name → guid
+  GUIDS: Record<string, string>         // guid → name
+  SPELLS: Record<string, SpellInfo>
+}

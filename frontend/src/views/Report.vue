@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFilters } from '../composables/useFilters'
 import BasePage from '../components/BasePage.vue'
@@ -11,6 +11,7 @@ import PlayerTable from '../components/PlayerTable.vue'
 import type { BossAttempt } from '../types/api'
 
 const route = useRoute()
+const router = useRouter()
 const { report, players, loading, error, fetchOverview } = useReport()
 const { activeView, setView, specFilter, sortKey, sortDir, filteredPlayers, setSort, toggleSpec } = useFilters(players)
 
@@ -31,7 +32,6 @@ const selectedHref = computed(() => {
 })
 
 function selectBoss(attempt: BossAttempt): void {
-  // When switching bosses, clear spec filter
   specFilter.value = []
   fetchOverview(reportId.value, {
     boss: attempt.encounter_name,
@@ -39,6 +39,10 @@ function selectBoss(attempt: BossAttempt): void {
     attempt: String(attempt.attempt),
     s: String(attempt.duration),
   })
+}
+
+function goPlayer(playerName: string): void {
+  router.push(`/reports/${reportId.value}/player/${encodeURIComponent(playerName)}`)
 }
 
 const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
@@ -67,7 +71,7 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
           @toggle="toggleSpec"
         />
 
-        <!-- View tabs: DAMAGE | HEAL | TAKEN -->
+        <!-- Primary tab bar: DAMAGE | HEAL | TAKEN | DEATHS | COMPARE -->
         <div class="tab-bar">
           <button
             :class="{ active: activeView === 'damage' }"
@@ -81,18 +85,27 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
             :class="{ active: activeView === 'taken' }"
             @click="setView('taken')"
           >Taken</button>
+          <router-link
+            :to="`/reports/${reportId}/deaths`"
+            class="tab-link"
+          >Deaths</router-link>
+          <router-link
+            :to="`/reports/${reportId}/compare`"
+            class="tab-link"
+          >Compare</router-link>
         </div>
 
         <!-- DPS chart -->
         <DpsChart :players="filteredPlayers" :view="activeView" />
 
-        <!-- Player table -->
+        <!-- Player table — click row to drill into player detail -->
         <PlayerTable
           :players="filteredPlayers"
           :view="activeView"
           :sort-key="sortKey"
           :sort-dir="sortDir"
           @sort="setSort"
+          @player-click="goPlayer"
         />
       </BasePage>
     </main>
@@ -107,5 +120,23 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
   font-size: 15px;
   color: var(--text);
   border-bottom: 1px solid var(--table-border);
+}
+
+.tab-link {
+  padding: 6px 12px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-link:hover,
+.tab-link.router-link-active {
+  color: var(--text);
+  border-bottom-color: var(--primary);
 }
 </style>

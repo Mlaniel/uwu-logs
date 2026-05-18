@@ -136,6 +136,60 @@ def recent_reports():
     return jsonify(results)
 
 
+# ─── GET /api/v2/reports/<id>/player/<name>/ ─────────────────────────────────
+
+@apiv2_bp.route("/reports/<report_id>/player/<path:source>/")
+def player_breakdown(report_id: str, source: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        view = request.args.get("view", "damage")
+        target_guid = request.args.get("target")
+
+        heal = view == "heal"
+        taken = view == "taken"
+        data = report.get_numbers_breakdown_wrap(
+            segments, source, filter_guid=target_guid, heal=heal, taken=taken
+        )
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    # SPELLS_DATA values are plain dicts from Spell.to_dict() — JSON-safe.
+    # TARGETS / PETS are already plain dicts.
+    return jsonify(data)
+
+
+# ─── GET /api/v2/reports/<id>/deaths/ ────────────────────────────────────────
+
+@apiv2_bp.route("/reports/<report_id>/deaths/")
+def report_deaths(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        data = report.get_deaths_v2_wrap(segments)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    # SPELLS: dict of spell_id → Spell objects — serialize them.
+    if "SPELLS" in data:
+        data["SPELLS"] = {
+            str(k): v.to_dict() if hasattr(v, "to_dict") else v
+            for k, v in data["SPELLS"].items()
+        }
+
+    # CLASSES/PLAYERS/GUIDS are plain dicts of strings — JSON-safe.
+    # DEATHS values contain lists of lists (normalized log lines) — JSON-safe.
+    return jsonify(data)
+
+
 # ─── SPA catch-all (add last in Z_SERVER.py, not here) ───────────────────────
 # See the comment in Z_SERVER.py — the catch-all must be the very last route
 # registered on the main app, after all blueprints are registered.
