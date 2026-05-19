@@ -28,7 +28,7 @@ function assemblePlayer(
     name,
     spec_name: spec[0],
     spec_icon: spec[1],
-    class_name: response.PLAYER_CLASSES[name] ?? '',
+    class_name: (response.PLAYER_CLASSES[name] ?? '').toLowerCase().replace(/\s+/g, '-'),
     useful: rawUseful ? normalizeStatCell(rawUseful) : null,
     damage: normalizeStatCell(response.DATA.damage?.[name]),
     heal: normalizeStatCell(response.DATA.heal?.[name]),

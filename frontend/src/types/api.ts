@@ -147,6 +147,14 @@ export interface TimelineApiResponse {
   CLASS: string          // class name (lowercase)
 }
 
+// Response from GET /api/v2/reports/:id/damage_graph/
+// labels: one MM:SS string per second of the fight
+// players: {name: cumulative_damage_at_each_second[]}
+export interface DamageGraphData {
+  labels: string[]
+  players: Record<string, number[]>
+}
+
 // Response from GET /api/v2/reports/:id/deaths/
 export interface DeathApiResponse {
   DEATHS: Record<string, DeathEntry>    // key: "seconds-playername"

@@ -260,6 +260,66 @@ def report_compare(report_id: str):
     return result, 200, {"Content-Type": "application/json"}
 
 
+# ─── GET /api/v2/reports/<id>/damage_graph/ ──────────────────────────────────
+# Returns cumulative damage per second for every player in the given fight
+# segment. Requires the same query params as the overview endpoint (boss, mode,
+# attempt, s, f) and must resolve to a single specific segment — not the full
+# raid ([[None, None]]).
+#
+# Response: { labels: ["0:00", "0:01", ...], players: { name: [int, ...] } }
+
+@apiv2_bp.route("/reports/<report_id>/damage_graph/")
+def damage_graph(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    if not segments or segments[0][0] is None:
+        return jsonify({"error": "damage_graph requires a specific boss segment"}), 400
+
+    s, f = segments[0]
+
+    try:
+        raw_all = report.get_all_players_raw(s, f)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    if not raw_all:
+        return jsonify({"labels": [], "players": {}})
+
+    last_offset = max(
+        (max(offsets.keys()) for offsets in raw_all.values() if offsets),
+        default=0,
+    )
+    n_secs = last_offset // 10 + 1
+
+    # Build MM:SS labels
+    labels = []
+    for sec in range(n_secs):
+        m, sv = divmod(sec, 60)
+        labels.append(f"{m}:{sv:02d}")
+
+    # Compute cumulative damage per second for each player
+    players_out: dict[str, list[int]] = {}
+    for player_name, offsets in raw_all.items():
+        cumul = 0
+        arr = []
+        for sec in range(n_secs):
+            for tenth in range(10):
+                cumul += offsets.get(sec * 10 + tenth, 0)
+            arr.append(cumul)
+        if cumul > 0:
+            players_out[player_name] = arr
+
+    return jsonify({"labels": labels, "players": players_out})
+
+
 # ─── SPA catch-all (add last in Z_SERVER.py, not here) ───────────────────────
 # See the comment in Z_SERVER.py — the catch-all must be the very last route
 # registered on the main app, after all blueprints are registered.

@@ -4,7 +4,6 @@ import DpsChart from './DpsChart.vue'
 import { makePlayer, makeHealer } from '../test/fixtures'
 
 // Chart.js uses canvas APIs not available in happy-dom; stub the whole module.
-// Must use `function` syntax so `new Chart(...)` works as a constructor.
 vi.mock('chart.js', () => {
   const MockChart = vi.fn(function (this: any) {
     this.update = vi.fn()
@@ -16,6 +15,9 @@ vi.mock('chart.js', () => {
     Chart: MockChart,
     BarController: {},
     BarElement: {},
+    LineController: {},
+    LineElement: {},
+    PointElement: {},
     CategoryScale: {},
     LinearScale: {},
     Tooltip: {},
@@ -26,9 +28,9 @@ import { Chart } from 'chart.js'
 
 const players = [makePlayer(), makeHealer()]
 
-function mountChart() {
+function mountChart(overrides: Record<string, unknown> = {}) {
   return mount(DpsChart, {
-    props: { players, view: 'damage' },
+    props: { players, view: 'damage', reportId: 'test-report', selectedHref: '', ...overrides },
     attachTo: document.body,
   })
 }
@@ -38,7 +40,7 @@ beforeEach(() => {
 })
 
 describe('DpsChart', () => {
-  it('onMounted — Chart instance created, chartInstance is not null', async () => {
+  it('onMounted — Chart instance created', async () => {
     mountChart()
     await flushPromises()
     expect(Chart).toHaveBeenCalledOnce()
@@ -51,20 +53,18 @@ describe('DpsChart', () => {
     expect(canvasArg).toBeInstanceOf(HTMLCanvasElement)
   })
 
-  it('watch triggers chart.update(), NOT destroy + new Chart', async () => {
+  it('props change — destroys old chart and creates a new one', async () => {
     const wrapper = mountChart()
     await flushPromises()
 
-    const instance = vi.mocked(Chart).mock.results[0].value
-    const updateSpy = vi.spyOn(instance, 'update')
-    const destroySpy = vi.spyOn(instance, 'destroy')
+    const firstInstance = vi.mocked(Chart).mock.results[0].value
+    const destroySpy = vi.spyOn(firstInstance, 'destroy')
 
     await wrapper.setProps({ players: [makePlayer({ name: 'NewPlayer' })], view: 'damage' })
+    await flushPromises()
 
-    expect(updateSpy).toHaveBeenCalled()
-    expect(destroySpy).not.toHaveBeenCalled()
-    // Chart constructor should not be called a second time
-    expect(Chart).toHaveBeenCalledTimes(1)
+    expect(destroySpy).toHaveBeenCalled()
+    expect(Chart).toHaveBeenCalledTimes(2)
   })
 
   it('onUnmounted — destroy() called', async () => {
@@ -81,7 +81,6 @@ describe('DpsChart', () => {
 
   it('unmount during pending update — no error thrown', async () => {
     const wrapper = mountChart()
-    // Unmount before flushPromises (before onMounted resolves)
     expect(() => wrapper.unmount()).not.toThrow()
   })
 })

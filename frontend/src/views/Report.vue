@@ -94,7 +94,12 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
         </div>
 
         <!-- DPS chart -->
-        <DpsChart :players="filteredPlayers" :view="activeView" />
+        <DpsChart
+          :players="filteredPlayers"
+          :view="activeView"
+          :report-id="reportId"
+          :selected-href="selectedHref"
+        />
 
         <!-- Player table — click row to drill into player detail -->
         <PlayerTable

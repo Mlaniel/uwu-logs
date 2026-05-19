@@ -133,7 +133,64 @@ def convert_keys_to_str(data: dict[int, int]):
         data[f"{minutes:0>2}:{seconds:0>2}"] = data.pop(k)
 
 
+def get_raw_data_all_players(
+    logs: list[str],
+    guid_to_player: dict[str, str],
+    all_guids: set[str],
+) -> dict[str, dict[str, int]]:
+    """Single log scan → {player_name: {timestamp_str: damage}}."""
+    per_player: dict[str, defaultdict] = {}
+    for line in logs:
+        if "DAMAGE" not in line:
+            continue
+        try:
+            timestamp, flag, sGUID, _, tGUID, _, _, _, _, damage, _ = line.split(',', 10)
+        except ValueError:
+            continue
+        if sGUID not in guid_to_player:
+            continue
+        if tGUID in all_guids:
+            continue
+        if flag not in FLAGS:
+            continue
+        player_name = guid_to_player[sGUID]
+        if player_name not in per_player:
+            per_player[player_name] = defaultdict(int)
+        per_player[player_name][timestamp[-9:-2]] += int(damage)
+    return per_player
+
+
 class Dps(logs_base.THE_LOGS):
+    @logs_base.cache_wrap
+    def get_all_players_raw(self, s: int, f: int) -> dict[str, dict[int, int]]:
+        """Single-pass scan → {player_name: {offset_tenth_sec: damage}} for all players."""
+        logs_slice = self.LOGS[s:f]
+        if not logs_slice:
+            return {}
+
+        all_guids = self.get_players_and_pets_guids()
+
+        # Build guid → player_name (includes pets mapped to their master)
+        guid_to_player: dict[str, str] = {}
+        for player_name in self.CLASSES_NAMES:
+            for guid in self.get_units_controlled_by(player_name):
+                guid_to_player[guid] = player_name
+
+        raw_by_ts = get_raw_data_all_players(logs_slice, guid_to_player, all_guids)
+
+        # Convert timestamp strings to integer offsets from the fight start
+        first_key = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        result: dict[str, dict[int, int]] = {}
+        for player_name, ts_map in raw_by_ts.items():
+            converted: dict[int, int] = {}
+            for ts_str, dmg in ts_map.items():
+                offset = to_int(ts_str) - first_key
+                if offset < 0:
+                    offset += 36000
+                converted[offset] = converted.get(offset, 0) + dmg
+            result[player_name] = converted
+        return result
+
     @logs_base.cache_wrap
     def get_dps(self, s, f, player: str):
         logs_slice = self.LOGS[s:f]

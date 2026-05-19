@@ -75,6 +75,10 @@ describe('useReport', () => {
     expect(names).not.toContain('Total')
     expect(names).toContain('Razac')
     expect(names).toContain('Healbot')
+
+    const razac = players.value.find(p => p.name === 'Razac')!
+    // class_name must be CSS-kebab-case so CLASS_COLORS lookup works
+    expect(razac.class_name).toBe('death-knight')
   })
 
   it('players — Healbot has useful=null (no entry in DATA.useful)', async () => {
