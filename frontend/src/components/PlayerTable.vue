@@ -109,14 +109,14 @@ function getStatCell(player: Player) {
 
           <!-- Damage view -->
           <template v-if="view === 'damage'">
-            <div class="col-num" :class="rankClass(getStatCell(player).percent)">
-              {{ player.useful ? player.useful.percent + '%' : '—' }}
-            </div>
-            <div class="col-num number">
+            <div class="col-num number" :class="rankClass(player.useful?.percent ?? player.damage.percent)">
               {{ player.useful?.value || '—' }}
             </div>
             <div class="col-num number">
               {{ player.damage.value }}
+            </div>
+            <div class="col-num number">
+              {{ player.damage.per_second }}
             </div>
           </template>
 

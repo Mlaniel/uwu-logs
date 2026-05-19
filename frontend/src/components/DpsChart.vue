@@ -18,13 +18,19 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 let chartInstance: Chart | null = null
 
 function buildChartData() {
+  // When at least one player has useful data (specific boss fight), filter to dps only.
+  // When useful is absent for everyone (full-raid view), show all players by damage.
+  const hasSomeUseful = props.players.some(p => p.useful !== null)
+
   const sorted = [...props.players]
     .filter(p => {
-      if (props.view === 'damage') return p.useful !== null
+      if (props.view === 'damage') {
+        return hasSomeUseful ? p.useful !== null : p.damage.per_second > 0
+      }
       return true
     })
     .sort((a, b) => {
-      if (props.view === 'damage') return (b.useful?.per_second ?? 0) - (a.useful?.per_second ?? 0)
+      if (props.view === 'damage') return (b.useful?.per_second ?? b.damage.per_second) - (a.useful?.per_second ?? a.damage.per_second)
       if (props.view === 'heal') return b.heal.per_second - a.heal.per_second
       return b.taken.per_second - a.taken.per_second
     })
@@ -33,7 +39,7 @@ function buildChartData() {
   return {
     labels: sorted.map(p => p.name),
     values: sorted.map(p => {
-      if (props.view === 'damage') return p.useful?.per_second ?? 0
+      if (props.view === 'damage') return p.useful?.per_second ?? p.damage.per_second
       if (props.view === 'heal') return p.heal.per_second
       return p.taken.per_second
     }),
