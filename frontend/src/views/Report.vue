@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFilters } from '../composables/useFilters'
@@ -20,25 +20,19 @@ const reportId = computed(() => route.params.id as string)
 // Fetch on mount and when the report ID changes
 watch(reportId, id => fetchOverview(id), { immediate: true })
 
-// Boss selector state — track the selected segment href
-const selectedHref = computed(() => {
-  if (!route.query.boss) return ''
-  const parts = [`?boss=${route.query.boss}`]
-  if (route.query.mode) parts.push(`mode=${route.query.mode}`)
-  if (route.query.attempt) parts.push(`attempt=${route.query.attempt}`)
-  if (route.query.s) parts.push(`s=${route.query.s}`)
-  if (route.query.f) parts.push(`f=${route.query.f}`)
-  return parts.join('&')
-})
+// Boss selector state — track the full href of the selected attempt.
+// attempt.href is like "?boss=lich-king&mode=25H&attempt=0&s=268&f=340".
+// BossSelector compares selectedHref against BossGroup.href ("?boss=lich-king")
+// using startsWith, and against BossAttempt.href using ===.
+const selectedHref = ref<string>('')
 
 function selectBoss(attempt: BossAttempt): void {
   specFilter.value = []
-  fetchOverview(reportId.value, {
-    boss: attempt.encounter_name,
-    mode: attempt.difficulty,
-    attempt: String(attempt.attempt),
-    s: String(attempt.duration),
-  })
+  selectedHref.value = attempt.href
+  // Parse href params — contains the HTML slug ("lich-king"), not the display name.
+  const params = Object.fromEntries(new URLSearchParams(attempt.href.slice(1)))
+  router.replace({ query: params })
+  fetchOverview(reportId.value, params)
 }
 
 function goPlayer(playerName: string): void {

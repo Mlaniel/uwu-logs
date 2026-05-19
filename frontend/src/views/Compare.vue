@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
 import SpellTable from '../components/SpellTable.vue'
+import { CLASS_DISPLAY_NAMES } from '../constants/bosses'
 import type { SpellRow, SpellInfo } from '../types/api'
 
 interface ComparePlayer {
@@ -44,7 +45,7 @@ const { data, loading: compareLoading, error, execute } = useFetch<CompareApiRes
 
 function runCompare(): void {
   if (!selectedClass.value) return
-  execute(`/reports/${reportId.value}/compare/`, {
+  execute(`/api/v2/reports/${reportId.value}/compare/`, {
     method: 'POST',
     body: { class: selectedClass.value },
   })
@@ -83,7 +84,7 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
           <label class="picker-label">Class</label>
           <select v-model="selectedClass" class="class-select">
             <option v-for="cls in availableClasses" :key="cls" :value="cls">
-              {{ cls }}
+              {{ CLASS_DISPLAY_NAMES[cls] ?? cls }}
             </option>
           </select>
         </div>

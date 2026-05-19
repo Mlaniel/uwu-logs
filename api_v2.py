@@ -235,6 +235,31 @@ def report_timeline(report_id: str):
     return report.get_spell_history_wrap_json(s, f, player_guid), 200, {"Content-Type": "application/json"}
 
 
+# ─── POST /api/v2/reports/<id>/compare/ ──────────────────────────────────────
+# Body: { "class": "<class-slug>" }  e.g. "death-knight", "warrior"
+# Returns: { PLAYERS, SPELLS, TARGETS } — same shape as get_comparison_data().
+
+@apiv2_bp.route("/reports/<report_id>/compare/", methods=["POST"])
+def report_compare(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    body = request.get_json(force=True, silent=True) or {}
+    class_name = body.get("class", "").strip()
+    if not class_name:
+        return jsonify({"error": "Missing 'class' in request body"}), 400
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        result = report.get_comparison_data(segments, class_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return result, 200, {"Content-Type": "application/json"}
+
+
 # ─── SPA catch-all (add last in Z_SERVER.py, not here) ───────────────────────
 # See the comment in Z_SERVER.py — the catch-all must be the very last route
 # registered on the main app, after all blueprints are registered.

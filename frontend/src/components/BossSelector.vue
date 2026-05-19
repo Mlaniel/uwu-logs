@@ -58,7 +58,7 @@ function visibleAttempts(bg: BossGroup): BossAttempt[] {
       <button
         class="boss-row"
         :class="{
-          selected: selectedHref === bg.href,
+          selected: props.selectedHref.startsWith(bg.href),
           kill: isKill(bg),
           wipe: !isKill(bg),
         }"

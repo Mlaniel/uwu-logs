@@ -106,7 +106,7 @@ describe('useFetch', () => {
 
   it('POST — correct Content-Type header and JSON body', async () => {
     const captured: RequestInit[] = []
-    vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => {
       captured.push(init)
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
     }))
