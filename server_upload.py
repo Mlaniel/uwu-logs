@@ -66,11 +66,9 @@ def get_servers(folder):
 @app.get("/upload", response_class=HTMLResponse)
 async def upload_get(request: Request):
     return TEMPLATES.TemplateResponse(
+        request,
         "upload.html",
-        context={
-            "request": request,
-            "SERVERS": get_servers(),
-        }
+        context={"SERVERS": get_servers()},
     )
 
 @app.post("/upload")

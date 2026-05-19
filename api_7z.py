@@ -1,4 +1,5 @@
 import re
+import shutil
 import subprocess
 from datetime import datetime
 from functools import cached_property
@@ -71,11 +72,21 @@ class SevenZip:
     
     @property
     def executable_path(self):
-        return self._7z_type.executable.path
+        local = self._7z_type.executable.path
+        if local.is_file():
+            return local
+        # Prefer system-installed 7zz, then 7z, before downloading a portable copy.
+        for name in ("7zz", "7z"):
+            found = shutil.which(name)
+            if found:
+                return Path(found)
+        return local
 
     def _exists(self):
         try:
-            return self.executable_path.is_file()
+            if self.executable_path.is_file():
+                return True
+            return bool(shutil.which("7zz") or shutil.which("7z"))
         except (AttributeError, TypeError):
             return False
 
