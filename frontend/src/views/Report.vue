@@ -112,7 +112,6 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
         <!-- Player table — click row to drill into player detail -->
         <PlayerTable
           :players="filteredPlayers"
-          :view="activeView"
           :sort-key="sortKey"
           :sort-dir="sortDir"
           @sort="setSort"

@@ -71,22 +71,22 @@ describe('useFilters — spec filter', () => {
 describe('useFilters — sort', () => {
   it('setSort first call on a new key sets key and dir=desc', () => {
     const { sortKey, sortDir, setSort } = makeFilters([makePlayer()])
-    setSort('per_second')
-    expect(sortKey.value).toBe('per_second')
+    setSort('dps')
+    expect(sortKey.value).toBe('dps')
     expect(sortDir.value).toBe('desc')
   })
 
   it('setSort same key twice toggles dir to asc', () => {
     const { sortDir, setSort } = makeFilters([makePlayer()])
-    setSort('per_second')
-    setSort('per_second')
+    setSort('dps')
+    setSort('dps')
     expect(sortDir.value).toBe('asc')
   })
 
   it('setSort different key resets dir to desc', () => {
     const { sortDir, setSort } = makeFilters([makePlayer()])
-    setSort('per_second')
-    setSort('per_second') // now asc
+    setSort('dps')
+    setSort('dps') // now asc
     setSort('name')       // different key → resets to desc
     expect(sortDir.value).toBe('desc')
   })

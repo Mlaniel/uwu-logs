@@ -4,7 +4,7 @@ import type { ComputedRef, Ref } from 'vue'
 import type { Player } from '../types/api'
 
 export type PlayerView = 'damage' | 'heal' | 'taken'
-export type SortKey = 'name' | 'per_second' | 'useful_dmg' | 'total_dmg' | 'heal' | 'heal_total'
+export type SortKey = 'name' | 'useful_dmg' | 'dps' | 'heal' | 'hps' | 'taken' | 'dtps'
 
 const VALID_VIEWS = new Set<PlayerView>(['damage', 'heal', 'taken'])
 
@@ -12,16 +12,15 @@ function parseView(v: unknown): PlayerView {
   return VALID_VIEWS.has(v as PlayerView) ? (v as PlayerView) : 'damage'
 }
 
-function getPlayerSortValue(player: Player, key: SortKey, view: PlayerView): number {
-  if (key === 'name') return 0  // handled as string sort below
-  if (key === 'useful_dmg') return player.useful?.per_second ?? -1
-  if (key === 'total_dmg') return player.damage.per_second
+function getPlayerSortValue(player: Player, key: SortKey): number {
+  if (key === 'name') return 0
+  if (key === 'useful_dmg') return player.useful?.per_second ?? player.damage.per_second
+  if (key === 'dps') return player.useful?.per_second ?? player.damage.per_second
   if (key === 'heal') return player.heal.per_second
-  if (key === 'heal_total') return player.heal_total.per_second
-  // 'per_second' — use the active view column
-  if (view === 'heal') return player.heal.per_second
-  if (view === 'taken') return player.taken.per_second
-  return player.damage.per_second
+  if (key === 'hps') return player.heal.per_second
+  if (key === 'taken') return player.taken.per_second
+  if (key === 'dtps') return player.taken.per_second
+  return 0
 }
 
 export function useFilters(players: ComputedRef<Player[]>) {
@@ -36,10 +35,6 @@ export function useFilters(players: ComputedRef<Player[]>) {
 
   function setView(v: PlayerView): void {
     router.replace({ query: { ...route.query, view: v } })
-    // Reset sort to sensible default for the new view
-    if (v === 'damage') { sortKey.value = 'useful_dmg'; sortDir.value = 'desc' }
-    if (v === 'heal')   { sortKey.value = 'heal';       sortDir.value = 'desc' }
-    if (v === 'taken')  { sortKey.value = 'per_second'; sortDir.value = 'desc' }
   }
 
   function setSort(key: SortKey): void {
@@ -69,11 +64,10 @@ export function useFilters(players: ComputedRef<Player[]>) {
 
     const key = sortKey.value
     const dir = sortDir.value
-    const view = activeView.value
 
     return [...list].sort((a, b) => {
-      // Healers (null useful) always sort last in damage view
-      if (view === 'damage' || key === 'useful_dmg') {
+      // Healers (null useful) sort last when sorting by damage columns
+      if (key === 'useful_dmg' || key === 'dps') {
         const aNull = a.useful === null
         const bNull = b.useful === null
         if (aNull !== bNull) return aNull ? 1 : -1
@@ -84,8 +78,8 @@ export function useFilters(players: ComputedRef<Player[]>) {
         return dir === 'asc' ? cmp : -cmp
       }
 
-      const aVal = getPlayerSortValue(a, key, view)
-      const bVal = getPlayerSortValue(b, key, view)
+      const aVal = getPlayerSortValue(a, key)
+      const bVal = getPlayerSortValue(b, key)
       return dir === 'desc' ? bVal - aVal : aVal - bVal
     })
   })
