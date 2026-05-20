@@ -155,6 +155,14 @@ export interface DamageGraphData {
   players: Record<string, number[]>
 }
 
+// All three graph datasets bundled together — passed from DpsChart to Report
+// so the parent can derive per-player stats for any selected time window.
+export interface AllGraphData {
+  damage: DamageGraphData | null
+  heal: DamageGraphData | null
+  taken: DamageGraphData | null
+}
+
 // Response from GET /api/v2/reports/:id/deaths/
 export interface DeathApiResponse {
   DEATHS: Record<string, DeathEntry>    // key: "seconds-playername"

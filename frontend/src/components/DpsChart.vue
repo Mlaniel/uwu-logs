@@ -6,8 +6,7 @@ import {
   LineController, LineElement, PointElement,
   CategoryScale, LinearScale, Tooltip,
 } from 'chart.js'
-import type { Player } from '../types/api'
-import type { DamageGraphData } from '../types/api'
+import type { Player, DamageGraphData, AllGraphData } from '../types/api'
 import type { PlayerView } from '../composables/useFilters'
 import { CLASS_COLORS } from '../constants/bosses'
 import { useFetch } from '../composables/useFetch'
@@ -18,57 +17,157 @@ Chart.register(
   CategoryScale, LinearScale, Tooltip,
 )
 
+interface RangeSelection { startIdx: number; endIdx: number }
+
 const props = defineProps<{
   players: Player[]
   view: PlayerView
   reportId: string
-  selectedHref: string   // "" = full-raid, "?boss=..." = specific fight
+  selectedHref: string
+}>()
+
+const emit = defineEmits<{
+  'range-change': [range: RangeSelection | null]
+  'graph-data': [data: AllGraphData]
 }>()
 
 const collapsed = ref(false)
 const canvas = ref<HTMLCanvasElement | null>(null)
+const chartWrap = ref<HTMLDivElement | null>(null)
 let chartInstance: Chart | null = null
 const stackLegend = ref<{ name: string; color: string }[]>([])
+const graphLoading = ref(false)
 
-const { data: graphData, loading: graphLoading, execute: fetchGraph } = useFetch<DamageGraphData>()
+// One fetch instance per stat type — all three pre-loaded when a boss is selected
+const { data: dmgData, execute: fetchDmg } = useFetch<DamageGraphData>()
+const { data: healData, execute: fetchHeal } = useFetch<DamageGraphData>()
+const { data: takenData, execute: fetchTaken } = useFetch<DamageGraphData>()
 
-// Parse boss from selectedHref; null = full-raid view
+// Graph data for the currently active chart view
+const graphData = computed<DamageGraphData | null>(() =>
+  props.view === 'heal' ? healData.value :
+  props.view === 'taken' ? takenData.value :
+  dmgData.value
+)
+
 const bossParam = computed(() => {
   if (!props.selectedHref) return null
   return new URLSearchParams(props.selectedHref.slice(1)).get('boss')
 })
 
-// Stacked area mode activates for any view when a specific boss is selected
 const isLineMode = computed(() => !!bossParam.value)
 
-// ── data builders ──────────────────────────────────────────────────────────
+// ── Drag-select ────────────────────────────────────────────────────────────
+
+const isDragging = ref(false)
+const dragStartPx = ref(0)
+const dragCurrentPx = ref(0)
+const localRange = ref<RangeSelection | null>(null)
+
+function getWrapX(e: MouseEvent): number {
+  return e.clientX - (chartWrap.value?.getBoundingClientRect().left ?? 0)
+}
+
+// Linearly interpolate mouse X → data array index
+function pixelToIdx(px: number): number {
+  if (!chartInstance || !graphData.value) return 0
+  const scale = chartInstance.scales.x
+  const n = graphData.value.labels.length
+  const clamped = Math.max(scale.left, Math.min(scale.right, px))
+  return Math.round(((clamped - scale.left) / (scale.right - scale.left)) * (n - 1))
+}
+
+function commitRange(endPx: number): void {
+  const delta = Math.abs(endPx - dragStartPx.value)
+  if (delta < 5) { clearRange(); return }
+
+  const startIdx = pixelToIdx(Math.min(dragStartPx.value, endPx))
+  const endIdx = pixelToIdx(Math.max(dragStartPx.value, endPx))
+  if (endIdx <= startIdx) { clearRange(); return }
+
+  localRange.value = { startIdx, endIdx }
+  emit('range-change', localRange.value)
+  rebuildChart()
+}
+
+function onWrapMouseDown(e: MouseEvent) {
+  if (!isLineMode.value || !chartInstance) return
+  e.preventDefault()
+  isDragging.value = true
+  dragStartPx.value = getWrapX(e)
+  dragCurrentPx.value = dragStartPx.value
+  window.addEventListener('mousemove', onWinMouseMove)
+  window.addEventListener('mouseup', onWinMouseUp, { once: true })
+}
+
+function onWinMouseMove(e: MouseEvent) {
+  if (isDragging.value) dragCurrentPx.value = getWrapX(e)
+}
+
+function onWinMouseUp(e: MouseEvent) {
+  window.removeEventListener('mousemove', onWinMouseMove)
+  if (!isDragging.value) return
+  isDragging.value = false
+  commitRange(getWrapX(e))
+}
+
+function clearRange() {
+  isDragging.value = false
+  if (!localRange.value) return
+  localRange.value = null
+  emit('range-change', null)
+  rebuildChart()
+}
+
+// Drag overlay — clamped to chart data area, shown only while dragging
+const overlayStyle = computed((): Record<string, string> | null => {
+  if (!isDragging.value || !chartInstance) return null
+  const scale = chartInstance.scales.x
+  const lo = Math.max(scale.left, Math.min(scale.right, Math.min(dragStartPx.value, dragCurrentPx.value)))
+  const hi = Math.max(scale.left, Math.min(scale.right, Math.max(dragStartPx.value, dragCurrentPx.value)))
+  return { left: lo + 'px', width: Math.max(1, hi - lo) + 'px' }
+})
+
+const rangeLabel = computed(() => {
+  if (!localRange.value || !graphData.value) return ''
+  const { labels } = graphData.value
+  const s = labels[localRange.value.startIdx] ?? ''
+  const e = labels[localRange.value.endIdx] ?? ''
+  return `${s} – ${e}`
+})
+
+// ── Legend toggle ──────────────────────────────────────────────────────────
+
+const hiddenPlayers = ref<Set<string>>(new Set())
+
+function togglePlayer(name: string) {
+  const next = new Set(hiddenPlayers.value)
+  if (next.has(name)) next.delete(name)
+  else next.add(name)
+  hiddenPlayers.value = next
+  rebuildChart()
+}
+
+// ── Data builders ──────────────────────────────────────────────────────────
+
+function fmtDamage(v: number): string {
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M'
+  if (v >= 1_000) return (v / 1_000).toFixed(0) + 'k'
+  return String(v)
+}
 
 function buildBarData() {
   const view = props.view
-
   if (view === 'heal') {
-    const sorted = [...props.players]
-      .filter(p => p.heal.per_second > 0)
-      .sort((a, b) => b.heal.per_second - a.heal.per_second)
-      .slice(0, 25)
-    return {
-      labels: sorted.map(p => p.name),
-      values: sorted.map(p => p.heal.per_second),
-    }
+    const sorted = [...props.players].filter(p => p.heal.per_second > 0)
+      .sort((a, b) => b.heal.per_second - a.heal.per_second).slice(0, 25)
+    return { labels: sorted.map(p => p.name), values: sorted.map(p => p.heal.per_second) }
   }
-
   if (view === 'taken') {
-    const sorted = [...props.players]
-      .filter(p => p.taken.per_second > 0)
-      .sort((a, b) => b.taken.per_second - a.taken.per_second)
-      .slice(0, 25)
-    return {
-      labels: sorted.map(p => p.name),
-      values: sorted.map(p => p.taken.per_second),
-    }
+    const sorted = [...props.players].filter(p => p.taken.per_second > 0)
+      .sort((a, b) => b.taken.per_second - a.taken.per_second).slice(0, 25)
+    return { labels: sorted.map(p => p.name), values: sorted.map(p => p.taken.per_second) }
   }
-
-  // damage
   const hasSomeUseful = props.players.some(p => p.useful !== null)
   const sorted = [...props.players]
     .filter(p => hasSomeUseful ? p.useful !== null : p.damage.per_second > 0)
@@ -83,60 +182,48 @@ function buildBarData() {
   }
 }
 
-// Players hidden from the stack (toggled off by user)
-const hiddenPlayers = ref<Set<string>>(new Set())
-
-function togglePlayer(name: string) {
-  const next = new Set(hiddenPlayers.value)
-  if (next.has(name)) next.delete(name)
-  else next.add(name)
-  hiddenPlayers.value = next
-  rebuildChart()
-}
-
 function buildStackedDatasets() {
   if (!graphData.value) return null
-  const { labels, players } = graphData.value
+  const { labels: allLabels, players } = graphData.value
 
-  // Top 15 by final cumulative damage, bottom of stack first (lowest DPS)
+  const start = localRange.value?.startIdx ?? 0
+  const end = localRange.value?.endIdx ?? allLabels.length - 1
+  const labels = allLabels.slice(start, end + 1)
+
+  // Damage accumulated within the selected window
+  function rangeDmg(cumul: number[]): number {
+    return (cumul[end] ?? 0) - (start > 0 ? (cumul[start - 1] ?? 0) : 0)
+  }
+
+  // Lowest range-damage first → bottom of stack
   const sorted = Object.entries(players)
     .filter(([name]) => !hiddenPlayers.value.has(name))
-    .sort(([, a], [, b]) => (a.at(-1) ?? 0) - (b.at(-1) ?? 0))
+    .sort(([, a], [, b]) => rangeDmg(a) - rangeDmg(b))
     .slice(0, 15)
 
   const datasets = sorted.map(([name, cumul]) => {
-    const player = props.players.find(p => p.name === name)
-    const color = CLASS_COLORS[player?.class_name ?? ''] ?? 'hsl(271, 76%, 43%)'
-    // Convert cumulative → per-second DPS
-    const dps = cumul.map((v, i) => i === 0 ? v : v - cumul[i - 1])
+    const color = CLASS_COLORS[props.players.find(p => p.name === name)?.class_name ?? ''] ?? 'hsl(271, 76%, 43%)'
+    const baseline = start > 0 ? (cumul[start - 1] ?? 0) : 0
+    const sliced = cumul.slice(start, end + 1)
+    // Convert cumulative → per-second
+    const dps = sliced.map((v, i) => v - (i === 0 ? baseline : sliced[i - 1]))
     return {
-      label: name,
-      data: dps,
-      borderColor: color,
-      backgroundColor: color + '99',   // semi-transparent fill
-      borderWidth: 1,
-      pointRadius: 0,
-      pointHoverRadius: 0,
-      tension: 0.3,
-      fill: true,
+      label: name, data: dps,
+      borderColor: color, backgroundColor: color + '99',
+      borderWidth: 1, pointRadius: 0, pointHoverRadius: 0,
+      tension: 0.3, fill: true,
     }
   })
 
-  // All players sorted by total for the legend (highest first)
+  // Legend: highest range-damage first
   const legendOrder = Object.entries(players)
-    .sort(([, a], [, b]) => (b.at(-1) ?? 0) - (a.at(-1) ?? 0))
+    .sort(([, a], [, b]) => rangeDmg(b) - rangeDmg(a))
     .map(([name]) => name)
 
   return { labels, datasets, legendOrder }
 }
 
-// ── chart lifecycle ────────────────────────────────────────────────────────
-
-function fmtDamage(v: number): string {
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M'
-  if (v >= 1_000) return (v / 1_000).toFixed(0) + 'k'
-  return String(v)
-}
+// ── Chart lifecycle ────────────────────────────────────────────────────────
 
 function rebuildChart() {
   if (!canvas.value) return
@@ -147,13 +234,10 @@ function rebuildChart() {
     const sd = buildStackedDatasets()
     if (!sd) return
 
-    stackLegend.value = sd.legendOrder.map(name => {
-      const player = props.players.find(p => p.name === name)
-      return {
-        name,
-        color: CLASS_COLORS[player?.class_name ?? ''] ?? 'hsl(271, 76%, 43%)',
-      }
-    })
+    stackLegend.value = sd.legendOrder.map(name => ({
+      name,
+      color: CLASS_COLORS[props.players.find(p => p.name === name)?.class_name ?? ''] ?? 'hsl(271, 76%, 43%)',
+    }))
 
     chartInstance = new Chart(canvas.value, {
       type: 'line',
@@ -198,6 +282,7 @@ function rebuildChart() {
     })
   } else {
     stackLegend.value = []
+    localRange.value = null
     const { labels, values } = buildBarData()
     chartInstance = new Chart(canvas.value, {
       type: 'bar',
@@ -225,14 +310,29 @@ function rebuildChart() {
   }
 }
 
-// Re-fetch whenever boss or view changes (view switches tabs within a boss fight)
-watch([bossParam, () => props.view], ([boss]) => {
-  graphData.value = null
-  if (!boss) return
-  fetchGraph(`/api/v2/reports/${props.reportId}/damage_graph/${props.selectedHref}&view=${props.view}`)
+// Fetch all 3 datasets when boss changes
+watch(bossParam, (boss) => {
+  localRange.value = null
+  dmgData.value = null
+  healData.value = null
+  takenData.value = null
+  emit('range-change', null)
+  if (!boss) {
+    emit('graph-data', { damage: null, heal: null, taken: null })
+    return
+  }
+  graphLoading.value = true
+  const base = `/api/v2/reports/${props.reportId}/damage_graph/${props.selectedHref}`
+  Promise.all([
+    fetchDmg(`${base}&view=damage`),
+    fetchHeal(`${base}&view=heal`),
+    fetchTaken(`${base}&view=taken`),
+  ]).then(() => {
+    graphLoading.value = false
+    emit('graph-data', { damage: dmgData.value, heal: healData.value, taken: takenData.value })
+  })
 }, { immediate: true })
 
-// Rebuild chart when data or mode changes
 watch(
   [isLineMode, graphData, () => props.players, () => props.view],
   rebuildChart,
@@ -240,7 +340,11 @@ watch(
 )
 
 onMounted(rebuildChart)
-onUnmounted(() => { chartInstance?.destroy(); chartInstance = null })
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onWinMouseMove)
+  chartInstance?.destroy()
+  chartInstance = null
+})
 </script>
 
 <template>
@@ -250,9 +354,21 @@ onUnmounted(() => { chartInstance?.destroy(); chartInstance = null })
         {{ collapsed ? '▶ Show chart' : '▼ Hide chart' }}
       </button>
       <span v-if="graphLoading" class="loading-hint">Loading…</span>
+      <template v-if="localRange && !graphLoading">
+        <span class="range-label">{{ rangeLabel }}</span>
+        <button class="clear-range-btn" @click="clearRange">✕ Clear</button>
+      </template>
+      <span v-if="isLineMode && !localRange && !graphLoading" class="drag-hint">drag to select range</span>
     </div>
-    <div v-show="!collapsed" class="chart-wrap">
+    <div
+      v-show="!collapsed"
+      ref="chartWrap"
+      class="chart-wrap"
+      :class="{ selectable: isLineMode }"
+      @mousedown="onWrapMouseDown"
+    >
       <canvas ref="canvas" />
+      <div v-if="overlayStyle" class="select-overlay" :style="overlayStyle" />
     </div>
     <div v-if="!collapsed && stackLegend.length" class="stack-legend">
       <button
@@ -294,7 +410,8 @@ onUnmounted(() => { chartInstance?.destroy(); chartInstance = null })
 }
 .collapse-btn:hover { color: var(--text); }
 
-.loading-hint {
+.loading-hint,
+.drag-hint {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 11px;
   color: var(--text-muted);
@@ -302,9 +419,45 @@ onUnmounted(() => { chartInstance?.destroy(); chartInstance = null })
   text-transform: uppercase;
 }
 
+.range-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.clear-range-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+}
+.clear-range-btn:hover { color: var(--text); }
+
 .chart-wrap {
   height: 260px;
   position: relative;
+}
+
+.chart-wrap.selectable {
+  cursor: crosshair;
+}
+
+/* Drag selection highlight */
+.select-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  pointer-events: none;
 }
 
 .stack-legend {
