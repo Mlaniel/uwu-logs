@@ -159,15 +159,16 @@ const displayPlayers = computed<Player[]>(() => {
           <router-link :to="`/reports/${reportId}/compare`" class="tab-link">Compare</router-link>
         </div>
 
-        <!-- Full Raid overview OR per-boss stacked chart -->
+        <!-- Full Raid overview (shown only when no boss selected) -->
         <RaidOverview
           v-if="!selectedHref"
           :bosses="bosses"
           :players="players"
           :duration="reportDuration"
         />
+
+        <!-- Chart: grouped bar (full-raid) or stacked area (boss) -->
         <DpsChart
-          v-else
           :players="filteredPlayers"
           :view="activeView"
           :report-id="reportId"

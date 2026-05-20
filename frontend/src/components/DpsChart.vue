@@ -156,30 +156,41 @@ function fmtDamage(v: number): string {
   return String(v)
 }
 
+// Full-raid bar chart: all 3 per-second metrics as grouped (non-stacked) bars,
+// players sorted by DPS descending.
 function buildBarData() {
-  const view = props.view
-  if (view === 'heal') {
-    const sorted = [...props.players].filter(p => p.heal.per_second > 0)
-      .sort((a, b) => b.heal.per_second - a.heal.per_second).slice(0, 25)
-    return { labels: sorted.map(p => p.name), values: sorted.map(p => p.heal.per_second) }
-  }
-  if (view === 'taken') {
-    const sorted = [...props.players].filter(p => p.taken.per_second > 0)
-      .sort((a, b) => b.taken.per_second - a.taken.per_second).slice(0, 25)
-    return { labels: sorted.map(p => p.name), values: sorted.map(p => p.taken.per_second) }
-  }
-  const hasSomeUseful = props.players.some(p => p.useful !== null)
   const sorted = [...props.players]
-    .filter(p => hasSomeUseful ? p.useful !== null : p.damage.per_second > 0)
     .sort((a, b) =>
       (b.useful?.per_second ?? b.damage.per_second) -
       (a.useful?.per_second ?? a.damage.per_second)
     )
     .slice(0, 25)
-  return {
-    labels: sorted.map(p => p.name),
-    values: sorted.map(p => p.useful?.per_second ?? p.damage.per_second),
-  }
+
+  const labels = sorted.map(p => p.name)
+  const datasets = [
+    {
+      label: 'DPS',
+      data: sorted.map(p => p.useful?.per_second ?? p.damage.per_second),
+      backgroundColor: 'rgba(167,99,247,0.75)',
+      borderWidth: 0,
+      borderRadius: 2,
+    },
+    {
+      label: 'HPS',
+      data: sorted.map(p => p.heal.per_second),
+      backgroundColor: 'rgba(72,187,120,0.75)',
+      borderWidth: 0,
+      borderRadius: 2,
+    },
+    {
+      label: 'DTPS',
+      data: sorted.map(p => p.taken.per_second),
+      backgroundColor: 'rgba(239,84,84,0.75)',
+      borderWidth: 0,
+      borderRadius: 2,
+    },
+  ]
+  return { labels, datasets }
 }
 
 function buildStackedDatasets() {
@@ -283,25 +294,48 @@ function rebuildChart() {
   } else {
     stackLegend.value = []
     localRange.value = null
-    const { labels, values } = buildBarData()
+    const { labels, datasets } = buildBarData()
     chartInstance = new Chart(canvas.value, {
       type: 'bar',
-      data: {
-        labels,
-        datasets: [{ data: values, backgroundColor: 'hsl(271, 76%, 43%)', borderWidth: 0, borderRadius: 0 }],
-      },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        plugins: { legend: { display: false } },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: true,
+            labels: {
+              color: '#9e9e9e',
+              font: { family: 'Barlow Condensed', size: 11 },
+              boxWidth: 10,
+              boxHeight: 10,
+              padding: 12,
+            },
+          },
+          tooltip: {
+            itemSort: (a, b) => (b.raw as number) - (a.raw as number),
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${fmtDamage(ctx.raw as number)}`,
+            },
+          },
+        },
         scales: {
           x: {
-            ticks: { color: 'gainsboro', font: { family: 'Barlow Condensed', size: 11 } },
+            ticks: {
+              color: 'gainsboro',
+              font: { family: 'Barlow Condensed', size: 11 },
+              maxRotation: 45,
+            },
             grid: { color: 'hsl(0, 0%, 8%)' },
           },
           y: {
-            ticks: { color: '#5e5e5e', font: { family: 'Barlow Condensed', size: 11 } },
+            ticks: {
+              color: '#5e5e5e',
+              font: { family: 'Barlow Condensed', size: 11 },
+              callback: v => fmtDamage(v as number),
+            },
             grid: { color: 'hsl(0, 0%, 8%)' },
           },
         },

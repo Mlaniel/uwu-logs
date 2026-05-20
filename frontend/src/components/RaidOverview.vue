@@ -4,12 +4,14 @@ import type { BossGroup, BossAttempt, Player } from '../types/api'
 import { CLASS_DISPLAY_NAMES } from '../constants/bosses'
 
 const props = defineProps<{
-  bosses: BossGroup[]       // SEGMENTS_LINKS from report
-  players: Player[]         // full unfiltered player list
-  duration: string          // DURATION_STR from report
+  bosses: BossGroup[]
+  players: Player[]
+  duration: string
 }>()
 
 // ── Role detection ─────────────────────────────────────────────────────────
+// Spec-name matching is the primary signal — DATA.useful is empty in the
+// full-raid view, so relying on useful === null would mark everyone a healer.
 
 const TANK_SPECS = new Set([
   'Blood Death Knight',
@@ -18,9 +20,19 @@ const TANK_SPECS = new Set([
   'Protection Warrior',
 ])
 
+const HEALER_SPECS = new Set([
+  'Restoration Druid',
+  'Holy Paladin',
+  'Discipline Priest',
+  'Holy Priest',
+  'Restoration Shaman',
+])
+
 function getRole(p: Player): 'tank' | 'healer' | 'dps' {
-  if (p.useful === null) return 'healer'
-  if (TANK_SPECS.has(p.spec_name)) return 'tank'
+  if (HEALER_SPECS.has(p.spec_name)) return 'healer'
+  if (TANK_SPECS.has(p.spec_name))   return 'tank'
+  // Fallback for unrecognised specs — if heal >> damage, assume healer
+  if (p.useful === null && p.heal.per_second > p.damage.per_second) return 'healer'
   return 'dps'
 }
 
@@ -37,8 +49,7 @@ function fmtRate(v: number): string {
   return v.toFixed(0)
 }
 
-// "Frost Death Knight" → "Frost", "Restoration Shaman" → "Resto", etc.
-const SPEC_PREFIX_ABBREVS: Record<string, string> = {
+const SPEC_ABBREVS: Record<string, string> = {
   'Restoration': 'Resto',
   'Protection':  'Prot',
   'Discipline':  'Disc',
@@ -54,13 +65,13 @@ const SPEC_PREFIX_ABBREVS: Record<string, string> = {
   'Subtlety':      'Sub',
 }
 
-function specShort(player: Player): string {
-  const cls = CLASS_DISPLAY_NAMES[player.class_name] ?? ''
-  let prefix = cls && player.spec_name.endsWith(cls)
-    ? player.spec_name.slice(0, -cls.length).trim()
-    : player.spec_name
+function specShort(p: Player): string {
+  const cls = CLASS_DISPLAY_NAMES[p.class_name] ?? ''
+  const prefix = cls && p.spec_name.endsWith(cls)
+    ? p.spec_name.slice(0, -cls.length).trim()
+    : p.spec_name
   if (!prefix) return cls
-  return SPEC_PREFIX_ABBREVS[prefix] ?? prefix
+  return SPEC_ABBREVS[prefix] ?? prefix
 }
 
 // ── Boss helpers ───────────────────────────────────────────────────────────
@@ -91,13 +102,10 @@ const totalWipes = computed(() =>
   activeBosses.value.reduce((n, bg) => n + wipeCount(bg), 0)
 )
 
-// Difficulty from the first non-TBD attempt
 const difficulty = computed(() => {
   for (const bg of activeBosses.value) {
     for (const s of bg.segments) {
-      if (s.difficulty && s.difficulty !== 'TBD' && s.difficulty !== 'All') {
-        return s.difficulty
-      }
+      if (s.difficulty && s.difficulty !== 'TBD' && s.difficulty !== 'All') return s.difficulty
     }
   }
   return ''
@@ -123,81 +131,79 @@ const dps = computed(() =>
 <template>
   <div class="raid-overview">
 
-    <!-- ── Summary bar ──────────────────────────────────────────────────── -->
+    <!-- Summary bar -->
     <div class="summary-bar">
-      <span class="stat">{{ kills.length }}<span class="dim"> kills</span></span>
+      <span>{{ kills.length }}<span class="dim"> kills</span></span>
       <span class="bull">·</span>
-      <span class="stat">{{ totalWipes }}<span class="dim"> wipes</span></span>
+      <span>{{ totalWipes }}<span class="dim"> wipes</span></span>
       <span class="bull">·</span>
-      <span class="stat">{{ players.length }}<span class="dim"> players</span></span>
+      <span>{{ players.length }}<span class="dim"> players</span></span>
       <span class="bull">·</span>
-      <span class="stat dim">{{ duration }}</span>
+      <span class="dim">{{ duration }}</span>
       <template v-if="difficulty">
         <span class="bull">·</span>
-        <span class="stat dim">{{ difficulty }}</span>
+        <span class="dim">{{ difficulty }}</span>
       </template>
     </div>
 
-    <!-- ── Boss results ─────────────────────────────────────────────────── -->
-    <div class="boss-section">
+    <!-- Body: boss list (left) + roster (right) side-by-side -->
+    <div class="body-row">
 
-      <!-- Kills -->
-      <div class="boss-col">
-        <div class="col-title">Boss kills</div>
+      <!-- Boss kills & wipes -->
+      <div class="boss-section">
+        <div class="col-title">Kills</div>
         <div v-for="bg in kills" :key="bg.boss_name" class="boss-row">
-          <span class="outcome-dot kill-dot">●</span>
+          <span class="kill-dot">●</span>
           <span class="boss-name">{{ bg.boss_name }}</span>
-          <span class="boss-dur">{{ killAttempt(bg)?.duration_str }}</span>
+          <span class="boss-dur dim">{{ killAttempt(bg)?.duration_str }}</span>
           <span v-if="wipeCount(bg) > 0" class="wipe-badge">{{ wipeCount(bg) }}w</span>
         </div>
         <div v-if="!kills.length" class="dim empty">No kills</div>
+
+        <template v-if="wipesOnly.length">
+          <div class="col-title wipes-title">Not killed</div>
+          <div v-for="bg in wipesOnly" :key="bg.boss_name" class="boss-row">
+            <span class="wipe-dot">✕</span>
+            <span class="boss-name">{{ bg.boss_name }}</span>
+            <span class="dim">{{ wipeCount(bg) }}w</span>
+          </div>
+        </template>
       </div>
 
-      <!-- Wipes only -->
-      <div v-if="wipesOnly.length" class="boss-col">
-        <div class="col-title">Not killed</div>
-        <div v-for="bg in wipesOnly" :key="bg.boss_name" class="boss-row">
-          <span class="outcome-dot wipe-dot">✕</span>
-          <span class="boss-name">{{ bg.boss_name }}</span>
-          <span class="dim">{{ wipeCount(bg) }}&nbsp;wipe{{ wipeCount(bg) !== 1 ? 's' : '' }}</span>
+      <!-- Roster -->
+      <div class="roster-section">
+
+        <div class="role-col">
+          <div class="col-title">Tanks <span class="dim">({{ tanks.length }})</span></div>
+          <div v-for="p in tanks" :key="p.name" class="player-row">
+            <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
+            <span class="pname" :class="classSlug(p.class_name)">{{ p.name }}</span>
+            <span class="spec-label dim">{{ specShort(p) }}</span>
+            <span class="pstat dim">{{ fmtRate(p.taken.per_second) }}&thinsp;dtps</span>
+          </div>
         </div>
-      </div>
 
-    </div>
-
-    <!-- ── Roster ───────────────────────────────────────────────────────── -->
-    <div class="roster-section">
-
-      <div class="role-col">
-        <div class="col-title">Tanks <span class="dim count">({{ tanks.length }})</span></div>
-        <div v-for="p in tanks" :key="p.name" class="player-row">
-          <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
-          <span class="pname" :class="classSlug(p.class_name)">{{ p.name }}</span>
-          <span class="spec-label dim">{{ specShort(p) }}</span>
-          <span class="pstat dim">{{ fmtRate(p.taken.per_second) }}&nbsp;dtps</span>
+        <div class="role-col">
+          <div class="col-title">Healers <span class="dim">({{ healers.length }})</span></div>
+          <div v-for="p in healers" :key="p.name" class="player-row">
+            <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
+            <span class="pname" :class="classSlug(p.class_name)">{{ p.name }}</span>
+            <span class="spec-label dim">{{ specShort(p) }}</span>
+            <span class="pstat dim">{{ fmtRate(p.heal.per_second) }}&thinsp;hps</span>
+          </div>
         </div>
-      </div>
 
-      <div class="role-col">
-        <div class="col-title">Healers <span class="dim count">({{ healers.length }})</span></div>
-        <div v-for="p in healers" :key="p.name" class="player-row">
-          <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
-          <span class="pname" :class="classSlug(p.class_name)">{{ p.name }}</span>
-          <span class="spec-label dim">{{ specShort(p) }}</span>
-          <span class="pstat dim">{{ fmtRate(p.heal.per_second) }}&nbsp;hps</span>
+        <div class="role-col dps-col">
+          <div class="col-title">DPS <span class="dim">({{ dps.length }})</span></div>
+          <div v-for="p in dps" :key="p.name" class="player-row">
+            <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
+            <span class="pname" :class="classSlug(p.class_name)">{{ p.name }}</span>
+            <span class="spec-label dim">{{ specShort(p) }}</span>
+            <span class="pstat dim">{{ fmtRate(p.useful?.per_second ?? p.damage.per_second) }}&thinsp;dps</span>
+          </div>
         </div>
-      </div>
 
-      <div class="role-col dps-col">
-        <div class="col-title">DPS <span class="dim count">({{ dps.length }})</span></div>
-        <div v-for="p in dps" :key="p.name" class="player-row">
-          <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
-          <span class="pname" :class="classSlug(p.class_name)">{{ p.name }}</span>
-          <span class="spec-label dim">{{ specShort(p) }}</span>
-          <span class="pstat dim">{{ fmtRate(p.useful?.per_second ?? p.damage.per_second) }}&nbsp;dps</span>
-        </div>
       </div>
-
     </div>
   </div>
 </template>
@@ -206,7 +212,7 @@ const dps = computed(() =>
 .raid-overview {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 4px 0 8px;
   margin-bottom: 4px;
 }
@@ -216,28 +222,26 @@ const dps = computed(() =>
 .summary-bar {
   display: flex;
   align-items: center;
-  gap: 0;
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 13px;
   color: var(--text);
 }
-
-.stat { white-space: nowrap; }
 .bull { color: var(--text-muted); margin: 0 8px; }
 .dim  { color: var(--text-muted); }
-.count { font-size: 12px; }
+
+/* ── Body row: boss list left, roster right ──────────────────────────────── */
+
+.body-row {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
 
 /* ── Boss section ────────────────────────────────────────────────────────── */
 
 .boss-section {
-  display: flex;
-  gap: 32px;
-  flex-wrap: wrap;
-}
-
-.boss-col {
-  min-width: 180px;
   flex: 0 0 auto;
+  width: 230px;
 }
 
 .col-title {
@@ -247,23 +251,23 @@ const dps = computed(() =>
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   padding-bottom: 3px;
   border-bottom: 1px solid var(--table-border);
 }
+.wipes-title { margin-top: 8px; }
 
 .boss-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 24px;
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 13px;
 }
 
-.outcome-dot { font-size: 9px; flex-shrink: 0; }
-.kill-dot  { color: var(--kill); }
-.wipe-dot  { color: var(--wipe); font-size: 10px; }
+.kill-dot { color: var(--kill); font-size: 9px; flex-shrink: 0; }
+.wipe-dot { color: var(--wipe); font-size: 10px; flex-shrink: 0; }
 
 .boss-name {
   flex: 1;
@@ -273,41 +277,28 @@ const dps = computed(() =>
   white-space: nowrap;
 }
 
-.boss-dur {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
+.boss-dur { font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.wipe-badge { font-size: 10px; color: var(--wipe); flex-shrink: 0; }
+.empty { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; padding: 4px 0; }
 
-.wipe-badge {
-  font-size: 10px;
-  color: var(--wipe);
-  flex-shrink: 0;
-}
-
-.empty {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 12px;
-  padding: 4px 0;
-}
-
-/* ── Roster ──────────────────────────────────────────────────────────────── */
+/* ── Roster section ──────────────────────────────────────────────────────── */
 
 .roster-section {
+  flex: 1;
   display: flex;
-  gap: 28px;
-  flex-wrap: wrap;
+  gap: 24px;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .role-col {
   flex: 0 0 auto;
-  min-width: 160px;
+  min-width: 150px;
 }
 
 .dps-col {
   flex: 1 1 auto;
-  max-width: 560px;
+  min-width: 150px;
 }
 
 .player-row {
@@ -326,7 +317,7 @@ const dps = computed(() =>
 .pname {
   font-size: 13px;
   flex-shrink: 0;
-  max-width: 100px;
+  max-width: 90px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
