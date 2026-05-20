@@ -7,6 +7,7 @@ import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import SpecFilter from '../components/SpecFilter.vue'
 import DpsChart from '../components/DpsChart.vue'
+import RaidOverview from '../components/RaidOverview.vue'
 import PlayerTable from '../components/PlayerTable.vue'
 import type { BossAttempt, AllGraphData, Player } from '../types/api'
 
@@ -40,8 +41,9 @@ function goPlayer(playerName: string): void {
   router.push(`/reports/${reportId.value}/player/${encodeURIComponent(playerName)}`)
 }
 
-const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
-const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
+const bosses        = computed(() => report.value?.SEGMENTS_LINKS ?? [])
+const reportTitle   = computed(() => report.value?.REPORT_NAME ?? '')
+const reportDuration = computed(() => report.value?.DURATION_STR ?? '')
 
 // ── Time-range selection ───────────────────────────────────────────────────
 
@@ -157,8 +159,15 @@ const displayPlayers = computed<Player[]>(() => {
           <router-link :to="`/reports/${reportId}/compare`" class="tab-link">Compare</router-link>
         </div>
 
-        <!-- Chart — emits range selection and graph data -->
+        <!-- Full Raid overview OR per-boss stacked chart -->
+        <RaidOverview
+          v-if="!selectedHref"
+          :bosses="bosses"
+          :players="players"
+          :duration="reportDuration"
+        />
         <DpsChart
+          v-else
           :players="filteredPlayers"
           :view="activeView"
           :report-id="reportId"
