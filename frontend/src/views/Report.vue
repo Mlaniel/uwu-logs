@@ -35,6 +35,13 @@ function selectBoss(attempt: BossAttempt): void {
   fetchOverview(reportId.value, params)
 }
 
+function clearBoss(): void {
+  specFilter.value = []
+  selectedHref.value = ''
+  router.replace({ query: { view: route.query.view } })
+  fetchOverview(reportId.value)
+}
+
 function goPlayer(playerName: string): void {
   router.push(`/reports/${reportId.value}/player/${encodeURIComponent(playerName)}`)
 }
@@ -52,6 +59,7 @@ const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
         :bosses="bosses"
         :selected-href="selectedHref"
         @select="selectBoss"
+        @deselect="clearBoss"
       />
     </aside>
 

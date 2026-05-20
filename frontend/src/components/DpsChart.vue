@@ -38,14 +38,38 @@ const bossParam = computed(() => {
   return new URLSearchParams(props.selectedHref.slice(1)).get('boss')
 })
 
-// Line mode = specific boss is selected AND we're in damage view
-const isLineMode = computed(() => !!bossParam.value && props.view === 'damage')
+// Stacked area mode activates for any view when a specific boss is selected
+const isLineMode = computed(() => !!bossParam.value)
 
 // ── data builders ──────────────────────────────────────────────────────────
 
 function buildBarData() {
-  const hasSomeUseful = props.players.some(p => p.useful !== null)
+  const view = props.view
 
+  if (view === 'heal') {
+    const sorted = [...props.players]
+      .filter(p => p.heal.per_second > 0)
+      .sort((a, b) => b.heal.per_second - a.heal.per_second)
+      .slice(0, 25)
+    return {
+      labels: sorted.map(p => p.name),
+      values: sorted.map(p => p.heal.per_second),
+    }
+  }
+
+  if (view === 'taken') {
+    const sorted = [...props.players]
+      .filter(p => p.taken.per_second > 0)
+      .sort((a, b) => b.taken.per_second - a.taken.per_second)
+      .slice(0, 25)
+    return {
+      labels: sorted.map(p => p.name),
+      values: sorted.map(p => p.taken.per_second),
+    }
+  }
+
+  // damage
+  const hasSomeUseful = props.players.some(p => p.useful !== null)
   const sorted = [...props.players]
     .filter(p => hasSomeUseful ? p.useful !== null : p.damage.per_second > 0)
     .sort((a, b) =>
@@ -53,7 +77,6 @@ function buildBarData() {
       (a.useful?.per_second ?? a.damage.per_second)
     )
     .slice(0, 25)
-
   return {
     labels: sorted.map(p => p.name),
     values: sorted.map(p => p.useful?.per_second ?? p.damage.per_second),
@@ -145,7 +168,10 @@ function rebuildChart() {
           tooltip: {
             itemSort: (a, b) => (b.raw as number) - (a.raw as number),
             callbacks: {
-              label: ctx => ` ${ctx.dataset.label}: ${fmtDamage(ctx.raw as number)}/s`,
+              label: ctx => {
+                const suffix = props.view === 'heal' ? 'HPS' : props.view === 'taken' ? 'DTPS' : 'DPS'
+                return ` ${ctx.dataset.label}: ${fmtDamage(ctx.raw as number)} ${suffix}`
+              },
             },
           },
         },
@@ -199,10 +225,11 @@ function rebuildChart() {
   }
 }
 
-// Fetch graph data whenever the boss changes
-watch(bossParam, boss => {
-  if (!boss) { graphData.value = null; return }
-  fetchGraph(`/api/v2/reports/${props.reportId}/damage_graph/${props.selectedHref}`)
+// Re-fetch whenever boss or view changes (view switches tabs within a boss fight)
+watch([bossParam, () => props.view], ([boss]) => {
+  graphData.value = null
+  if (!boss) return
+  fetchGraph(`/api/v2/reports/${props.reportId}/damage_graph/${props.selectedHref}&view=${props.view}`)
 }, { immediate: true })
 
 // Rebuild chart when data or mode changes
@@ -276,7 +303,7 @@ onUnmounted(() => { chartInstance?.destroy(); chartInstance = null })
 }
 
 .chart-wrap {
-  height: 200px;
+  height: 260px;
   position: relative;
 }
 

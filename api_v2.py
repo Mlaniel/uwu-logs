@@ -261,18 +261,22 @@ def report_compare(report_id: str):
 
 
 # ─── GET /api/v2/reports/<id>/damage_graph/ ──────────────────────────────────
-# Returns cumulative damage per second for every player in the given fight
-# segment. Requires the same query params as the overview endpoint (boss, mode,
-# attempt, s, f) and must resolve to a single specific segment — not the full
-# raid ([[None, None]]).
+# Returns cumulative values per second for every player in the given fight
+# segment. Pass ?view=damage|heal|taken (default: damage). Boss params are
+# required (boss, mode, attempt, s, f) — full-raid is not supported.
 #
 # Response: { labels: ["0:00", "0:01", ...], players: { name: [int, ...] } }
+# Values are cumulative so the frontend can diff adjacent elements for per-sec.
 
 @apiv2_bp.route("/reports/<report_id>/damage_graph/")
 def damage_graph(report_id: str):
     report, err = _load_report(report_id)
     if err:
         return err
+
+    graph_view = request.args.get("view", "damage")
+    if graph_view not in ("damage", "heal", "taken"):
+        graph_view = "damage"
 
     try:
         default_params = report.get_default_params(request)
@@ -286,7 +290,12 @@ def damage_graph(report_id: str):
     s, f = segments[0]
 
     try:
-        raw_all = report.get_all_players_raw(s, f)
+        if graph_view == "heal":
+            raw_all = report.get_all_players_raw_heal(s, f)
+        elif graph_view == "taken":
+            raw_all = report.get_all_players_raw_taken(s, f)
+        else:
+            raw_all = report.get_all_players_raw(s, f)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -305,7 +314,7 @@ def damage_graph(report_id: str):
         m, sv = divmod(sec, 60)
         labels.append(f"{m}:{sv:02d}")
 
-    # Compute cumulative damage per second for each player
+    # Compute cumulative value per second for each player
     players_out: dict[str, list[int]] = {}
     for player_name, offsets in raw_all.items():
         cumul = 0

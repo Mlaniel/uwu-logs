@@ -5,6 +5,7 @@ from c_bosses import BOSSES_FROM_HTML
 from h_debug import running_time
 
 FLAGS = {'SWING_DAMAGE', 'RANGE_DAMAGE', 'SPELL_DAMAGE', 'SPELL_PERIODIC_DAMAGE', 'DAMAGE_SHIELD'}
+FLAG_HEAL = {'SPELL_HEAL', 'SPELL_PERIODIC_HEAL'}
 
 def get_raw_data(logs: list[str], guids: set[str]):
     data = defaultdict(int)
@@ -160,6 +161,60 @@ def get_raw_data_all_players(
     return per_player
 
 
+def get_raw_data_all_players_heal(
+    logs: list[str],
+    guid_to_player: dict[str, str],
+) -> dict[str, dict[str, int]]:
+    """Single log scan → {player_name: {timestamp_str: effective_heal}} for all healers."""
+    per_player: dict[str, defaultdict] = {}
+    for line in logs:
+        if "_H" not in line:
+            continue
+        try:
+            timestamp, flag, sGUID, _, _, _, _, _, _, d, ok, _ = line.split(',', 11)
+        except ValueError:
+            continue
+        if sGUID not in guid_to_player:
+            continue
+        if flag not in FLAG_HEAL:
+            continue
+        effective = int(d) - int(ok)
+        if effective <= 0:
+            continue
+        player_name = guid_to_player[sGUID]
+        if player_name not in per_player:
+            per_player[player_name] = defaultdict(int)
+        per_player[player_name][timestamp[-9:-2]] += effective
+    return per_player
+
+
+def get_raw_data_all_players_taken(
+    logs: list[str],
+    guid_to_player: dict[str, str],
+    player_pet_guids: set[str],
+) -> dict[str, dict[str, int]]:
+    """Single log scan → {player_name: {timestamp_str: damage_taken}} for all players."""
+    per_player: dict[str, defaultdict] = {}
+    for line in logs:
+        if "DAMAGE" not in line:
+            continue
+        try:
+            timestamp, flag, _, _, tGUID, _, _, _, _, damage, _, _ = line.split(',', 11)
+        except ValueError:
+            continue
+        if tGUID not in player_pet_guids:
+            continue
+        if flag not in FLAGS:
+            continue
+        player_name = guid_to_player.get(tGUID)
+        if player_name is None:
+            continue
+        if player_name not in per_player:
+            per_player[player_name] = defaultdict(int)
+        per_player[player_name][timestamp[-9:-2]] += int(damage)
+    return per_player
+
+
 class Dps(logs_base.THE_LOGS):
     @logs_base.cache_wrap
     def get_all_players_raw(self, s: int, f: int) -> dict[str, dict[int, int]]:
@@ -188,6 +243,60 @@ class Dps(logs_base.THE_LOGS):
                 if offset < 0:
                     offset += 36000
                 converted[offset] = converted.get(offset, 0) + dmg
+            result[player_name] = converted
+        return result
+
+    @logs_base.cache_wrap
+    def get_all_players_raw_heal(self, s: int, f: int) -> dict[str, dict[int, int]]:
+        """Single-pass scan → {player_name: {offset_tenth_sec: effective_heal}}."""
+        logs_slice = self.LOGS[s:f]
+        if not logs_slice:
+            return {}
+
+        guid_to_player: dict[str, str] = {}
+        for player_name in self.CLASSES_NAMES:
+            for guid in self.get_units_controlled_by(player_name):
+                guid_to_player[guid] = player_name
+
+        raw_by_ts = get_raw_data_all_players_heal(logs_slice, guid_to_player)
+
+        first_key = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        result: dict[str, dict[int, int]] = {}
+        for player_name, ts_map in raw_by_ts.items():
+            converted: dict[int, int] = {}
+            for ts_str, amount in ts_map.items():
+                offset = to_int(ts_str) - first_key
+                if offset < 0:
+                    offset += 36000
+                converted[offset] = converted.get(offset, 0) + amount
+            result[player_name] = converted
+        return result
+
+    @logs_base.cache_wrap
+    def get_all_players_raw_taken(self, s: int, f: int) -> dict[str, dict[int, int]]:
+        """Single-pass scan → {player_name: {offset_tenth_sec: damage_taken}}."""
+        logs_slice = self.LOGS[s:f]
+        if not logs_slice:
+            return {}
+
+        all_guids = self.get_players_and_pets_guids()
+
+        guid_to_player: dict[str, str] = {}
+        for player_name in self.CLASSES_NAMES:
+            for guid in self.get_units_controlled_by(player_name):
+                guid_to_player[guid] = player_name
+
+        raw_by_ts = get_raw_data_all_players_taken(logs_slice, guid_to_player, all_guids)
+
+        first_key = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        result: dict[str, dict[int, int]] = {}
+        for player_name, ts_map in raw_by_ts.items():
+            converted: dict[int, int] = {}
+            for ts_str, amount in ts_map.items():
+                offset = to_int(ts_str) - first_key
+                if offset < 0:
+                    offset += 36000
+                converted[offset] = converted.get(offset, 0) + amount
             result[player_name] = converted
         return result
 

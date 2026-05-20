@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [attempt: BossAttempt]
+  deselect: []
 }>()
 
 const showAll = ref(false)
@@ -50,6 +51,14 @@ function visibleAttempts(bg: BossGroup): BossAttempt[] {
 
 <template>
   <nav class="boss-selector">
+    <button
+      class="full-raid-row"
+      :class="{ selected: !props.selectedHref }"
+      @click="emit('deselect')"
+    >
+      Full Raid
+    </button>
+
     <div
       v-for="bg in visibleBosses"
       :key="bg.boss_name"
@@ -181,4 +190,30 @@ function visibleAttempts(bg: BossGroup): BossAttempt[] {
 }
 
 .show-all-toggle:hover { color: var(--text); }
+
+.full-raid-row {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--table-border);
+  color: var(--text-muted);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  height: 32px;
+  padding: 0 12px;
+  margin-bottom: 4px;
+}
+
+.full-raid-row:hover { color: var(--text); }
+
+.full-raid-row.selected {
+  color: var(--text);
+  border-left: 3px solid var(--primary);
+  padding-left: 9px;
+}
 </style>

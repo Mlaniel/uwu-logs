@@ -56,11 +56,7 @@ const columns = computed(() => {
   ]
 })
 
-function getStatCell(player: Player) {
-  if (props.view === 'damage') return player.damage
-  if (props.view === 'heal') return player.heal
-  return player.taken
-}
+
 </script>
 
 <template>

@@ -116,6 +116,7 @@ class QuerySegment:
     sc: str = None
     fc: str = None
     target: str = None
+    view: str = ""
 
     @property
     def start(self):
