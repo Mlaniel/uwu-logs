@@ -157,6 +157,9 @@ function fmtDamage(v: number): string {
   return String(v)
 }
 
+// Kill boundary markers for the full-raid chart — set by buildRaidLineData.
+const raidKillBoundaries = ref<{ name: string; idx: number; is_kill: boolean }[]>([])
+
 // Full-raid line chart: concatenate all kills' per-second DPS/HPS/DTPS,
 // separated by a 1-second zero gap for visual clarity between bosses.
 function buildRaidLineData() {
@@ -178,23 +181,30 @@ function buildRaidLineData() {
   const dps: number[] = []
   const hps: number[] = []
   const dtps: number[] = []
+  const boundaries: { name: string; idx: number }[] = []
+  let cursor = 0
 
   for (let i = 0; i < kills.length; i++) {
     const k = kills[i]
+    boundaries.push({ name: k.name, idx: cursor, is_kill: k.is_kill ?? true })
     for (let s = 0; s < k.labels.length; s++) {
-      labels.push(s === 0 ? k.name : k.labels[s])
+      labels.push(k.labels[s])
       dps.push(sumFiltered(k.players?.damage, k.damage, s))
       hps.push(sumFiltered(k.players?.heal,   k.heal,   s))
       dtps.push(sumFiltered(k.players?.taken,  k.taken,  s))
     }
+    cursor += k.labels.length
     // 1-second separator gap between kills
     if (i < kills.length - 1) {
       labels.push('')
       dps.push(0)
       hps.push(0)
       dtps.push(0)
+      cursor += 1
     }
   }
+
+  raidKillBoundaries.value = boundaries
 
   const datasets = [
     {
@@ -334,9 +344,40 @@ function rebuildChart() {
     localRange.value = null
     const rd = buildRaidLineData()
     if (!rd) return
+
+    const killLabelPlugin = {
+      id: 'killLabels',
+      afterDraw(chart: Chart) {
+        const { ctx, scales, chartArea } = chart as any
+        ctx.save()
+        for (const { name, idx, is_kill } of raidKillBoundaries.value) {
+          const x = scales.x.getPixelForValue(idx)
+          if (x < chartArea.left - 1 || x > chartArea.right) continue
+
+          // Vertical separator: teal for kills, dim red for wipes
+          ctx.strokeStyle = is_kill ? 'rgba(72,187,120,0.35)' : 'rgba(239,84,84,0.25)'
+          ctx.lineWidth = 1
+          ctx.setLineDash(is_kill ? [] : [3, 5])
+          ctx.beginPath()
+          ctx.moveTo(x, chartArea.top)
+          ctx.lineTo(x, chartArea.bottom)
+          ctx.stroke()
+
+          // Boss name label
+          ctx.setLineDash([])
+          ctx.fillStyle = is_kill ? 'rgba(180,240,200,0.85)' : 'rgba(239,150,150,0.55)'
+          ctx.font = `${is_kill ? '600' : '400'} 12px "Barlow Condensed", sans-serif`
+          ctx.textAlign = 'left'
+          ctx.fillText(name, x + 4, chartArea.top + 14)
+        }
+        ctx.restore()
+      },
+    }
+
     chartInstance = new Chart(canvas.value, {
       type: 'line',
       data: { labels: rd.labels, datasets: rd.datasets },
+      plugins: [killLabelPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,

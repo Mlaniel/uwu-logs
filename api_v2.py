@@ -397,8 +397,14 @@ def raid_graph(report_id: str):
                     best = max(best, max(offsets.keys(), default=0))
         return best // 10 + 1 if best else 0
 
+    # All boss segments (kills + wipes) in chronological order
+    all_segments = sorted(
+        (seg for segs in report.SEGMENTS.values() for seg in segs),
+        key=lambda s: s.start,
+    )
+
     kills_out = []
-    for segment in report.SEGMENTS_KILLS:
+    for segment in all_segments:
         s, f = segment.start, segment.end
         try:
             dmg_raw   = report.get_all_players_raw(s, f)
@@ -417,11 +423,12 @@ def raid_graph(report_id: str):
             labels.append(f"{m}:{sv:02d}")
 
         kills_out.append({
-            "name":   segment.encounter_name,
-            "labels": labels,
-            "damage": _sum_per_second(dmg_raw, n),
-            "heal":   _sum_per_second(heal_raw, n),
-            "taken":  _sum_per_second(taken_raw, n),
+            "name":    segment.encounter_name,
+            "is_kill": segment.is_kill(),
+            "labels":  labels,
+            "damage":  _sum_per_second(dmg_raw, n),
+            "heal":    _sum_per_second(heal_raw, n),
+            "taken":   _sum_per_second(taken_raw, n),
             "players": {
                 "damage": _per_player_per_second(dmg_raw, n),
                 "heal":   _per_player_per_second(heal_raw, n),

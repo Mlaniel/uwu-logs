@@ -171,6 +171,7 @@ export interface AllGraphData {
 // damage/heal/taken: per-second summed values (not cumulative) across all players.
 export interface RaidKill {
   name: string
+  is_kill: boolean
   labels: string[]
   damage: number[]
   heal: number[]
