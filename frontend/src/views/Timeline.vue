@@ -82,10 +82,59 @@ const startOffset = ref(0)
 const startOffsetMs  = computed(() => startOffset.value * 1000)
 const totalWindowMs  = computed(() => startOffsetMs.value + duration.value * 1000)
 
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+
+interface ZoomRange { startMs: number; endMs: number }
+const zoomRange = ref<ZoomRange | null>(null)
+
+// Effective view window (unzoomed uses the full fight window)
+const viewStartMs = computed(() => zoomRange.value?.startMs ?? -startOffsetMs.value)
+const viewSpanMs  = computed(() => {
+  if (zoomRange.value) return zoomRange.value.endMs - zoomRange.value.startMs
+  return totalWindowMs.value
+})
+
 function toPercent(deltaMs: number): number {
-  if (!totalWindowMs.value) return 0
-  return (deltaMs + startOffsetMs.value) / totalWindowMs.value * 100
+  if (!viewSpanMs.value) return 0
+  return (deltaMs - viewStartMs.value) / viewSpanMs.value * 100
 }
+
+// Drag-to-zoom state
+interface DragZoom { startMs: number; endMs: number }
+const dragZoom = ref<DragZoom | null>(null)
+
+function msFromRuler(el: Element, clientX: number): number {
+  const rect = el.getBoundingClientRect()
+  const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  return viewStartMs.value + frac * viewSpanMs.value
+}
+
+function onRulerPointerDown(e: PointerEvent): void {
+  if (e.button !== 0) return
+  ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+  const ms = msFromRuler(e.currentTarget as Element, e.clientX)
+  dragZoom.value = { startMs: ms, endMs: ms }
+}
+
+function onRulerPointerMove(e: PointerEvent): void {
+  if (!dragZoom.value) return
+  dragZoom.value = { ...dragZoom.value, endMs: msFromRuler(e.currentTarget as Element, e.clientX) }
+}
+
+function onRulerPointerUp(e: PointerEvent): void {
+  if (!dragZoom.value) return
+  const lo = Math.min(dragZoom.value.startMs, dragZoom.value.endMs)
+  const hi = Math.max(dragZoom.value.startMs, dragZoom.value.endMs)
+  dragZoom.value = null
+  if (hi - lo > 500) zoomRange.value = { startMs: lo, endMs: hi }
+}
+
+function resetZoom(): void {
+  zoomRange.value = null
+}
+
+// Clear zoom when fight data reloads
+watch(data, () => { zoomRange.value = null })
 
 function fromStartMs(s: string): number {
   const dotIdx = s.indexOf('.')
@@ -202,7 +251,6 @@ interface CastSegment {
   events: CastEvent[]   // damage/heal ticks to render as dots
 }
 
-const OPEN_FLAGS = new Set(['SPELL_CAST_START', 'SPELL_CHANNEL_START'])
 const SKIP_FLAGS = new Set(['SPELL_CAST_SUCCESS'])   // bookkeeping only, no dot
 
 function groupIntoCasts(events: CastEvent[]): CastSegment[] {
@@ -252,10 +300,13 @@ function onCastMove(e: MouseEvent): void {
 }
 
 const ticks = computed<number[]>(() => {
+  const startSec = viewStartMs.value / 1000
+  const endSec   = (viewStartMs.value + viewSpanMs.value) / 1000
+  const spanSec  = endSec - startSec
+  const step     = spanSec > 120 ? 30 : spanSec > 30 ? 10 : spanSec > 10 ? 5 : 1
   const result: number[] = []
-  const startSec  = -startOffset.value
-  const firstTick = Math.ceil(startSec / 30) * 30
-  for (let t = firstTick; t <= duration.value; t += 30) result.push(t)
+  const firstTick = Math.ceil(startSec / step) * step
+  for (let t = firstTick; t <= endSec; t += step) result.push(t)
   return result
 })
 
@@ -314,6 +365,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
           {{ selectedAttempt.attempt_type === 'kill' ? 'Kill' : `Wipe ${selectedAttempt.attempt_from_last_kill}` }}
           ({{ selectedAttempt.duration_str }})
         </div>
+        <button v-if="zoomRange" class="zoom-reset" @click="resetZoom">Reset zoom</button>
       </div>
 
       <BasePage :loading="timelineLoading" :error="error">
@@ -321,7 +373,14 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
           <!-- Ruler + death markers -->
           <div class="ruler-row">
             <div class="label-col" />
-            <div class="ruler-track">
+            <div
+              class="ruler-track"
+              :class="{ 'ruler-track--dragging': dragZoom }"
+              @pointerdown="onRulerPointerDown"
+              @pointermove="onRulerPointerMove"
+              @pointerup="onRulerPointerUp"
+              @pointercancel="dragZoom = null"
+            >
               <div
                 v-for="t in ticks"
                 :key="t"
@@ -332,7 +391,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
               </div>
               <!-- 0:00 fight-start line (visible when pre-fight offset > 0) -->
               <div
-                v-if="startOffset > 0"
+                v-if="startOffset > 0 && !zoomRange"
                 class="zero-mark"
                 :style="{ left: toPercent(0) + '%' }"
               />
@@ -343,6 +402,15 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
                 class="death-mark"
                 :style="{ left: toPercent(d.ms) + '%' }"
                 :title="`${d.player} died at ${d.label}`"
+              />
+              <!-- Drag-to-zoom selection highlight -->
+              <div
+                v-if="dragZoom"
+                class="zoom-sel"
+                :style="{
+                  left:  Math.min(toPercent(dragZoom.startMs), toPercent(dragZoom.endMs)) + '%',
+                  width: Math.abs(toPercent(dragZoom.endMs) - toPercent(dragZoom.startMs)) + '%',
+                }"
               />
             </div>
           </div>
@@ -517,6 +585,23 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   padding-bottom: 4px;
 }
 
+.zoom-reset {
+  margin-left: auto;
+  align-self: flex-end;
+  padding: 3px 10px;
+  padding-bottom: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: none;
+  border: 1px solid var(--primary);
+  color: var(--primary-bright);
+  cursor: pointer;
+}
+.zoom-reset:hover { background: color-mix(in srgb, var(--primary) 15%, transparent); }
+
 /* ── Timeline ──────────────────────────────────────────────── */
 .timeline-wrap {
   overflow-x: auto;
@@ -545,6 +630,20 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   position: relative;
   flex: 1;
   height: 100%;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.ruler-track--dragging { cursor: col-resize; }
+
+/* Drag-to-zoom selection highlight */
+.zoom-sel {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
+  border: 1px solid var(--primary);
+  pointer-events: none;
 }
 
 .tick {
