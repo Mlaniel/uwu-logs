@@ -59,9 +59,15 @@ watch([selectedAttempt, selectedPlayer], runFetch)
 // ── Timeline rendering ────────────────────────────────────────────────────────
 const duration = computed(() => data.value?.RDURATION ?? 0)
 
+// How many seconds before 0:00 to show (0–60). Adjustable via slider.
+const startOffset = ref(0)
+
+const startOffsetMs  = computed(() => startOffset.value * 1000)
+const totalWindowMs  = computed(() => startOffsetMs.value + duration.value * 1000)
+
 function toPercent(deltaMs: number): number {
-  if (!duration.value) return 0
-  return Math.min((deltaMs / (duration.value * 1000)) * 100, 100)
+  if (!totalWindowMs.value) return 0
+  return (deltaMs + startOffsetMs.value) / totalWindowMs.value * 100
 }
 
 function fromStartMs(s: string): number {
@@ -96,14 +102,18 @@ function castClass(event: CastEvent): string {
 }
 
 function fmtSeconds(s: number): string {
-  const m = Math.floor(s / 60)
-  const rem = Math.floor(s % 60)
-  return `${m}:${String(rem).padStart(2, '0')}`
+  const sign = s < 0 ? '-' : ''
+  const abs  = Math.abs(s)
+  const m    = Math.floor(abs / 60)
+  const rem  = Math.floor(abs % 60)
+  return `${sign}${m}:${String(rem).padStart(2, '0')}`
 }
 
 const ticks = computed<number[]>(() => {
   const result: number[] = []
-  for (let t = 0; t <= duration.value; t += 30) result.push(t)
+  const startSec  = -startOffset.value
+  const firstTick = Math.ceil(startSec / 30) * 30
+  for (let t = firstTick; t <= duration.value; t += 30) result.push(t)
   return result
 })
 
@@ -141,6 +151,17 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
             </option>
           </select>
         </div>
+        <div class="control-group">
+          <label class="ctrl-label">Pre-fight&thinsp;({{ startOffset }}s)</label>
+          <input
+            type="range"
+            min="0"
+            max="60"
+            step="5"
+            v-model.number="startOffset"
+            class="offset-slider"
+          />
+        </div>
         <div v-if="selectedAttempt" class="attempt-info">
           {{ selectedAttempt.encounter_name }} —
           {{ selectedAttempt.difficulty }} —
@@ -163,6 +184,12 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
               >
                 <span class="tick-label">{{ fmtSeconds(t) }}</span>
               </div>
+              <!-- 0:00 fight-start line (visible when pre-fight offset > 0) -->
+              <div
+                v-if="startOffset > 0"
+                class="zero-mark"
+                :style="{ left: toPercent(0) + '%' }"
+              />
               <!-- Death markers — red | at time of death -->
               <div
                 v-for="(d, i) in deathMarkers"
@@ -263,6 +290,12 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 
 .ctrl-select:focus { outline: 1px solid var(--primary); }
 
+.offset-slider {
+  width: 120px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 .attempt-info {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.8125rem;
@@ -315,6 +348,17 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   font-size: 0.625rem;
   color: var(--text-muted);
   line-height: 24px;
+}
+
+/* 0:00 fight-start line — shown when pre-fight offset is active */
+.zero-mark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 1px;
+  background: var(--text-muted);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 /* Death marker — thin red vertical line on the ruler */
@@ -370,6 +414,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   flex: 1;
   height: 100%;
   background: hsl(0, 0%, 3%);
+  overflow: hidden;
 }
 
 .cast-tick {
