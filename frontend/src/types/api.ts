@@ -99,6 +99,23 @@ export interface TargetGroups {
   Pets: Record<string, string>
 }
 
+// Per-type hit statistics from format_hits_data() in logs_dmg_breakdown.py.
+// All numeric values are pre-formatted strings with space thousands-separators ("1 234").
+export interface HitStats {
+  total: string     // hits + crits count
+  hits: string      // non-crit count
+  crits: string     // crit count
+  percent: string   // crit rate e.g. "20.0%"
+  hit_avg: string   // avg non-crit value
+  crit_avg: string  // avg crit value
+}
+
+// Per-spell hit data split by direct (HIT) vs periodic (DOT).
+export interface SpellHitData {
+  HIT: HitStats
+  DOT: HitStats
+}
+
 // Response from GET /api/v2/reports/:id/player/:name/
 // ACTUAL/CASTS keys are spell_id strings. Values are formatted strings ("1 234 567").
 export interface PlayerApiResponse {
@@ -110,11 +127,14 @@ export interface PlayerApiResponse {
   ACTUAL_PERCENT: Record<string, number>
   CASTS: Record<string, string>
   SPELLS_DATA: Record<string, SpellInfo>
+  HITS: Record<string, SpellHitData>
+  MISSES: Record<string, string>
   TARGETS: TargetGroups
   PETS: Record<string, string>          // pet_guid → pet_name
 }
 
 // One spell row assembled from PlayerApiResponse for SpellTable display.
+// Extended fields are populated by usePlayer; absent in Compare's simpler rows.
 export interface SpellRow {
   spell_id: string
   name: string
@@ -123,6 +143,13 @@ export interface SpellRow {
   actual: string
   percent: number
   casts: string
+  // Extended — Player detail page only
+  hit_total?: string   // direct + periodic combined hits+crits count
+  crits?: string       // combined crit count
+  crit_pct?: string    // combined crit rate "20.0%"
+  avg_hit?: string     // avg non-crit (direct)
+  avg_crit?: string    // avg crit (direct)
+  misses?: string      // miss/dodge/parry/resist count
 }
 
 // One death entry from get_deaths_v2_wrap(). The `death` field is a list of
