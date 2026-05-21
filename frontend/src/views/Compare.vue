@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
@@ -25,12 +25,12 @@ interface CompareApiResponse {
 }
 
 const route = useRoute()
+const router = useRouter()
 const reportId = computed(() => route.params.id as string)
 
 const { report, loading: reportLoading, fetchOverview } = useReport()
 watch(reportId, id => fetchOverview(id), { immediate: true })
 
-const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
 const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
 
 const availableClasses = computed<string[]>(() => {
@@ -41,13 +41,31 @@ const availableClasses = computed<string[]>(() => {
 // Boss selection (drives compare query scope)
 const selectedHref = ref('')
 
+// Restore from URL when bosses load
+const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
+watch(bosses, bgs => {
+  if (selectedHref.value || !bgs.length) return
+  const qs = route.query.s as string | undefined
+  const qf = route.query.f as string | undefined
+  if (!qs || !qf) return
+  for (const bg of bgs) {
+    const found = bg.segments.find(seg => {
+      const p = new URLSearchParams(seg.href.slice(1))
+      return p.get('s') === qs && p.get('f') === qf
+    })
+    if (found) { selectedHref.value = found.href; return }
+  }
+}, { immediate: true })
+
 function selectBoss(attempt: BossAttempt): void {
   selectedHref.value = attempt.href
+  router.replace({ query: Object.fromEntries(new URLSearchParams(attempt.href.slice(1))) })
   runCompare()
 }
 
 function clearBoss(): void {
   selectedHref.value = ''
+  router.replace({ query: {} })
   runCompare()
 }
 
@@ -71,7 +89,7 @@ function runCompare(): void {
   execute(url, { method: 'POST', body: { class: selectedClass.value } })
 }
 
-watch(selectedClass, runCompare)
+watch([selectedClass, selectedHref], runCompare)
 
 function playerSpellRows(player: ComparePlayer): SpellRow[] {
   const spells = player.SPELLS_DATA ?? data.value?.SPELLS ?? {}
