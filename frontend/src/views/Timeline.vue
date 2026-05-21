@@ -161,9 +161,11 @@ function castLabel(event: CastEvent): string {
 
 function castClass(event: CastEvent): string {
   const flag = event[1]
+  const etc  = String(event[5] ?? '')
   if (flag.includes('MISS')) return 'cast-miss'
-  if (flag.includes('HEAL')) return 'cast-heal'
+  if (flag.includes('HEAL')) return isCritEtc(etc) ? 'cast-heal cast-crit' : 'cast-heal'
   if (flag.includes('AURA')) return 'cast-aura'
+  if (flag.includes('DAMAGE')) return isCritEtc(etc) ? 'cast-dmg cast-crit' : 'cast-dmg'
   return 'cast-dmg'
 }
 
@@ -215,19 +217,24 @@ function parsedAmount(ev: CastEvent): string {
   return n
 }
 
-// Determine hit result from the event flag and etc field.
-// SPELL_DAMAGE etc: spellSchool,amount,overkill,school,resisted,blocked,absorbed,critical,...
-// SPELL_MISSED etc: spellSchool,missType,...
+// SPELL_DAMAGE etc layout: spellSchool,amount,overkill,school,resisted,blocked,absorbed,critical,...
+// SPELL_MISSED etc layout: spellSchool,missType,...
+// critical is '1' on a crit, 'nil' or '0' otherwise (both formats seen on private servers).
+function isCritEtc(etc: string): boolean {
+  const parts = etc.split(',')
+  return parts[7] === '1'
+}
+
 function hitResult(ev: CastEvent): string {
   const flag = ev[1]
-  const parts = String(ev[5] ?? '').split(',')
+  const etc  = String(ev[5] ?? '')
+  const parts = etc.split(',')
   if (flag.includes('MISS')) {
     const raw = parts[1] ?? ''
-    if (!raw) return 'Miss'
-    return raw.charAt(0) + raw.slice(1).toLowerCase()   // "RESIST" → "Resist"
+    return raw ? raw.charAt(0) + raw.slice(1).toLowerCase() : 'Miss'
   }
   if (flag.includes('DAMAGE') || flag.includes('HEAL')) {
-    return parts[7] === '1' ? 'Crit' : 'Hit'
+    return isCritEtc(etc) ? 'Crit' : 'Hit'
   }
   return ''
 }
@@ -346,6 +353,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
         />
       </BasePage>
       <nav class="sidebar-nav">
+        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
         <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
         <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
       </nav>
@@ -797,6 +805,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 .cast-heal { background: var(--kill); }
 .cast-aura { background: var(--link); opacity: 0.6; }
 .cast-miss { background: var(--text-muted); opacity: 0.5; }
+.cast-crit { background: #ffd700; width: 5px; height: 20px; }
 
 .empty {
   color: var(--text-muted);

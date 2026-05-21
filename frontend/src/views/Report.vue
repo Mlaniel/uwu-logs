@@ -198,6 +198,7 @@ const displayPlayers = computed<Player[]>(() => {
         @deselect="clearBoss"
       />
       <nav class="sidebar-nav">
+        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
         <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
         <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
       </nav>
