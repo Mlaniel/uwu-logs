@@ -147,7 +147,17 @@ function fmtAmount(n: number): string {
 function parsedAmount(ev: CastEvent): string {
   const flag = ev[1]
   const etc  = String(ev[5] ?? '')
-  const raw  = parseInt(etc.split(',')[0])
+  const parts = etc.split(',')
+
+  // SPELL_*/RANGE_* lines: etc = "spellSchool,amount,overkill,..."
+  // SWING_DAMAGE lines:    etc = "overkill,..." — amount was in a separate field, not stored
+  let raw: number
+  if (flag === 'SWING_DAMAGE' || flag === 'SWING_MISSED') {
+    return ''
+  } else {
+    raw = parseInt(parts[1])   // skip spellSchool at [0]
+  }
+
   if (!raw || isNaN(raw)) return ''
   const n = fmtAmount(raw)
   if (flag.includes('HEAL'))   return `+${n}`
