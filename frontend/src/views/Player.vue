@@ -5,7 +5,8 @@ import { useReport } from '../composables/useReport'
 import { usePlayer } from '../composables/usePlayer'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
-import SpellTable from '../components/SpellTable.vue'
+import DpsChart from '../components/DpsChart.vue'
+import SpellBarTable from '../components/SpellBarTable.vue'
 import type { BossAttempt } from '../types/api'
 import type { PlayerView } from '../composables/usePlayer'
 
@@ -19,7 +20,7 @@ const activeView = computed<PlayerView>(() => {
   return (v === 'heal' || v === 'taken') ? v : 'damage'
 })
 
-const { report, loading: reportLoading, fetchOverview } = useReport()
+const { report, players, loading: reportLoading, fetchOverview } = useReport()
 watch(reportId, id => fetchOverview(id), { immediate: true })
 
 const bosses      = computed(() => report.value?.SEGMENTS_LINKS ?? [])
@@ -49,6 +50,9 @@ const bossQuery = computed<Record<string, string>>(() => {
   return Object.fromEntries(new URLSearchParams(href.slice(1)))
 })
 
+const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
+const fightDuration = computed(() => selectedAttempt.value?.duration ?? 0)
+
 function selectBoss(attempt: BossAttempt): void {
   selectedAttempt.value = attempt
   router.replace({ query: { ...bossQuery.value, view: activeView.value } })
@@ -62,6 +66,13 @@ function clearBoss(): void {
 function setView(v: PlayerView): void {
   router.replace({ query: { ...bossQuery.value, view: v } })
 }
+
+// ── Chart — filter the report's player list to just this player ───────────────
+
+const chartPlayers = computed(() => {
+  const p = players.value.find(pl => pl.name === playerName.value)
+  return p ? [p] : []
+})
 
 // ── Data fetch ────────────────────────────────────────────────────────────────
 
@@ -83,7 +94,6 @@ watch(
 // ── Display ───────────────────────────────────────────────────────────────────
 
 const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
-const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 </script>
 
 <template>
@@ -117,7 +127,16 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
         </div>
       </header>
 
+      <!-- DPS chart — same as boss report, filtered to this player -->
+      <DpsChart
+        :players="chartPlayers"
+        :view="activeView"
+        :report-id="reportId"
+        :selected-href="selectedHref"
+      />
+
       <BasePage :loading="loading" :error="error">
+        <!-- Target filter -->
         <div v-if="data?.TARGETS" class="targets-bar">
           <span class="targets-label">Filter target:</span>
           <router-link
@@ -134,7 +153,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
           >✕ All</router-link>
         </div>
 
-        <SpellTable :spells="spellRows" />
+        <SpellBarTable :spells="spellRows" :duration="fightDuration" />
       </BasePage>
     </main>
   </div>
