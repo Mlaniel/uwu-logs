@@ -18,9 +18,21 @@ const { activeView, specFilter, sortKey, sortDir, filteredPlayers, setSort, togg
 
 const reportId = computed(() => route.params.id as string)
 
-watch(reportId, id => fetchOverview(id), { immediate: true })
-
 const selectedHref = ref<string>('')
+
+watch(reportId, id => {
+  const q = route.query
+  if (q.s && q.f) {
+    const params: Record<string, string> = {}
+    for (const [k, v] of Object.entries(q)) {
+      if (v != null) params[k] = String(v)
+    }
+    selectedHref.value = '?' + new URLSearchParams(params).toString()
+    fetchOverview(id, params)
+  } else {
+    fetchOverview(id)
+  }
+}, { immediate: true })
 
 function selectBoss(attempt: BossAttempt): void {
   specFilter.value = []

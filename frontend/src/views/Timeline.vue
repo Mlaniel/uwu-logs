@@ -337,6 +337,12 @@ const ticks = computed<number[]>(() => {
 })
 
 const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
+
+const damageRouteQuery = computed(() => {
+  const href = selectedAttempt.value?.href
+  if (!href) return {}
+  return Object.fromEntries(new URLSearchParams(href.slice(1)))
+})
 </script>
 
 <template>
@@ -353,7 +359,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
         />
       </BasePage>
       <nav class="sidebar-nav">
-        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
+        <router-link :to="{ path: `/reports/${reportId}`, query: damageRouteQuery }" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
         <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
         <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
       </nav>

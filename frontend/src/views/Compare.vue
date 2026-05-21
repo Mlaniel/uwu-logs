@@ -58,6 +58,11 @@ watch(availableClasses, classes => {
 
 const { data, loading: compareLoading, error, execute } = useFetch<CompareApiResponse>()
 
+const damageRouteQuery = computed(() => {
+  if (!selectedHref.value) return {}
+  return Object.fromEntries(new URLSearchParams(selectedHref.value.slice(1)))
+})
+
 function runCompare(): void {
   if (!selectedClass.value) return
   const url = selectedHref.value
@@ -99,7 +104,7 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
         />
       </BasePage>
       <nav class="sidebar-nav">
-        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
+        <router-link :to="{ path: `/reports/${reportId}`, query: damageRouteQuery }" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
         <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
         <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
       </nav>
