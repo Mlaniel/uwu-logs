@@ -9,7 +9,7 @@ import SpecFilter from '../components/SpecFilter.vue'
 import DpsChart from '../components/DpsChart.vue'
 import RaidOverview from '../components/RaidOverview.vue'
 import PlayerTable from '../components/PlayerTable.vue'
-import type { BossAttempt, AllGraphData, Player } from '../types/api'
+import type { BossAttempt, AllGraphData, Player, RaidGraphData } from '../types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,14 +61,83 @@ function onRangeChange(range: RangeSelection | null): void {
   selectedRange.value = range
 }
 
+// ── Full-raid segment filter ───────────────────────────────────────────────
+
+type RaidFilter = 'all' | 'boss' | 'trash'
+const raidFilter = ref<RaidFilter>('all')
+const raidGraphData = ref<RaidGraphData | null>(null)
+
+function onRaidData(data: RaidGraphData | null): void {
+  raidGraphData.value = data
+}
+
 function fmtValue(n: number): string {
   if (!n) return ''
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
 }
 
+function computeFilteredRaidPlayers(base: Player[], rd: RaidGraphData, filter: RaidFilter): Player[] {
+  const n = rd.labels.length
+  const inBoss = new Uint8Array(n)
+  for (const r of rd.boss_regions ?? []) {
+    const end = Math.min(r.end_sec, n - 1)
+    for (let s = r.start_sec; s <= end; s++) inBoss[s] = 1
+  }
+
+  function secActive(s: number): boolean {
+    if (filter === 'boss')  return inBoss[s] === 1
+    if (filter === 'trash') return inBoss[s] === 0
+    return true
+  }
+
+  let duration = 0
+  for (let s = 0; s < n; s++) if (secActive(s)) duration++
+  if (duration === 0) return base
+
+  function playerSum(pool: Record<string, number[]> | undefined, name: string): number {
+    const arr = pool?.[name]
+    if (!arr) return 0
+    let total = 0
+    for (let s = 0; s < n; s++) if (secActive(s)) total += arr[s] ?? 0
+    return total
+  }
+
+  const dmgPool   = rd.players?.damage
+  const healPool  = rd.players?.heal
+  const takenPool = rd.players?.taken
+
+  const derived = base.map(p => ({
+    p,
+    dmg:   playerSum(dmgPool,   p.name),
+    heal:  playerSum(healPool,  p.name),
+    taken: playerSum(takenPool, p.name),
+  }))
+
+  const maxDmg   = Math.max(1, ...derived.map(d => d.dmg))
+  const maxHeal  = Math.max(1, ...derived.map(d => d.heal))
+  const maxTaken = Math.max(1, ...derived.map(d => d.taken))
+
+  return derived.map(({ p, dmg, heal, taken }) => ({
+    ...p,
+    useful: p.useful !== null
+      ? { value: fmtValue(dmg), per_second: dmg/duration, percent: Math.round(dmg/maxDmg*100) }
+      : null,
+    damage:     { value: fmtValue(dmg),   per_second: dmg/duration,   percent: Math.round(dmg/maxDmg*100)     },
+    heal:       { value: fmtValue(heal),  per_second: heal/duration,  percent: Math.round(heal/maxHeal*100)   },
+    heal_total: { value: fmtValue(heal),  per_second: heal/duration,  percent: Math.round(heal/maxHeal*100)   },
+    taken:      { value: fmtValue(taken), per_second: taken/duration, percent: Math.round(taken/maxTaken*100) },
+  }))
+}
+
 // Derive per-player stats from cumulative graph data for the selected window.
 // Falls back to the normal filtered list when no range is active.
 const displayPlayers = computed<Player[]>(() => {
+  // Full-raid filter: recompute from per-second arrays when filter is active
+  if (!selectedHref.value && raidGraphData.value && raidFilter.value !== 'all') {
+    return computeFilteredRaidPlayers(filteredPlayers.value, raidGraphData.value, raidFilter.value)
+  }
+
+  // Boss drag-select range
   const range = selectedRange.value
   const gd = allGraphData.value
   if (!range || !gd) return filteredPlayers.value
@@ -144,14 +213,27 @@ const displayPlayers = computed<Player[]>(() => {
           @toggle="toggleSpec"
         />
 
+        <!-- Raid segment filter — full-raid view only -->
+        <div v-if="!selectedHref" class="raid-filter">
+          <button
+            v-for="opt in (['boss', 'all', 'trash'] as const)"
+            :key="opt"
+            class="rf-btn"
+            :class="{ active: raidFilter === opt }"
+            @click="raidFilter = opt"
+          >{{ opt === 'all' ? 'All' : opt === 'boss' ? 'Boss' : 'Trash' }}</button>
+        </div>
+
         <!-- Chart: raid summary line (full-raid) or stacked area (boss) -->
         <DpsChart
           :players="filteredPlayers"
           :view="activeView"
           :report-id="reportId"
           :selected-href="selectedHref"
+          :raid-filter="raidFilter"
           @range-change="onRangeChange"
           @graph-data="onGraphData"
+          @raid-data="onRaidData"
         />
 
         <!-- Full Raid overview — below chart so chart is always the primary visual -->
@@ -209,6 +291,40 @@ const displayPlayers = computed<Player[]>(() => {
 .sidebar-nav-link.router-link-active {
   color: var(--text);
   background: var(--hover-row);
+}
+
+/* ── Raid segment filter ─────────────────────────────────────────────────── */
+
+.raid-filter {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 8px;
+}
+
+.rf-btn {
+  background: none;
+  border: 1px solid var(--table-border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 12px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.rf-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.rf-btn.active {
+  color: var(--text);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 </style>

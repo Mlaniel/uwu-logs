@@ -22,11 +22,13 @@ const props = defineProps<{
   view: PlayerView
   reportId: string
   selectedHref: string
+  raidFilter?: 'all' | 'boss' | 'trash'
 }>()
 
 const emit = defineEmits<{
   'range-change': [range: RangeSelection | null]
   'graph-data': [data: AllGraphData]
+  'raid-data': [data: RaidGraphData | null]
 }>()
 
 const collapsed = ref(false)
@@ -166,8 +168,24 @@ function buildRaidLineData() {
   if (!rd?.labels?.length) return null
 
   const playerNames = new Set(props.players.map(p => p.name))
+  const filter = props.raidFilter ?? 'all'
+
+  // Build a per-second inclusion mask from boss_regions
+  const n = rd.labels.length
+  const inBoss = new Uint8Array(n)
+  for (const r of rd.boss_regions ?? []) {
+    const end = Math.min(r.end_sec, n - 1)
+    for (let s = r.start_sec; s <= end; s++) inBoss[s] = 1
+  }
+
+  function secActive(s: number): boolean {
+    if (filter === 'all')   return true
+    if (filter === 'boss')  return inBoss[s] === 1
+    return inBoss[s] === 0
+  }
 
   function sumFiltered(pool: Record<string, number[]> | undefined, fallback: number[], s: number): number {
+    if (!secActive(s)) return 0
     if (!pool) return fallback[s] ?? 0
     let total = 0
     for (const [name, arr] of Object.entries(pool)) {
@@ -176,7 +194,6 @@ function buildRaidLineData() {
     return total
   }
 
-  const n = rd.labels.length
   const dps: number[] = []
   const hps: number[] = []
   const dtps: number[] = []
@@ -454,7 +471,10 @@ watch(bossParam, (boss) => {
       graphLoading.value = true
       fetchRaid(`/api/v2/reports/${props.reportId}/raid_graph/`).then(() => {
         graphLoading.value = false
+        emit('raid-data', raidData.value)
       })
+    } else {
+      emit('raid-data', raidData.value)
     }
     return
   }
@@ -472,7 +492,7 @@ watch(bossParam, (boss) => {
 }, { immediate: true })
 
 watch(
-  [isLineMode, graphData, raidData, () => props.players, () => props.view],
+  [isLineMode, graphData, raidData, () => props.players, () => props.view, () => props.raidFilter],
   rebuildChart,
   { deep: false },
 )
