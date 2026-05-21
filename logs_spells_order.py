@@ -102,14 +102,28 @@ def get_history(logs_slice: list[str], source_guid: str, ignored_guids: set[str]
         if source_guid not in line:
             continue
         try:
-            timestamp, flag, _, sName, tGUID, tName, spell_id, _, etc = line.split(',', 8)
-            # if flag in IGNORED_FLAGS or tGUID in ignored_guids:
+            parts = line.split(',', 8)
+            if len(parts) < 7:
+                continue
+            timestamp = parts[0]
+            flag      = parts[1]
+            sGUID     = parts[2]
+            sName     = parts[3]
+            tGUID     = parts[4]
+            tName     = parts[5]
+            spell_id  = parts[6]
+            etc       = parts[8] if len(parts) > 8 else ''
+            # Only keep events where the player is the SOURCE, not the target.
+            # Without this, enemy spells cast *at* the player pass the guid-in-line
+            # filter and corrupt the cast timeline with wrong CAST_START/DAMAGE pairs.
+            if sGUID != source_guid:
+                continue
             if flag in IGNORED_FLAGS:
                 continue
             _delta = get_delta(timestamp)
             history[spell_id].append((_delta, flag, sName, tName, tGUID, etc))
             flags.add(flag)
-        except ValueError:
+        except (ValueError, IndexError):
             continue
     
     return {

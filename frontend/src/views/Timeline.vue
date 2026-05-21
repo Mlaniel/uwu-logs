@@ -188,20 +188,60 @@ function onCastLeave(): void {
   tooltip.value = null
 }
 
-// Pair each SPELL_CAST_START with the next event that has damage/heal amount.
-// Returns { startMs, endMs } bars representing cast duration.
-function castBars(events: CastEvent[]): Array<{ startMs: number; endMs: number }> {
-  const bars: Array<{ startMs: number; endMs: number }> = []
-  let pendingMs: number | null = null
+// ── Cast grouping ─────────────────────────────────────────────────────────────
+//
+// Groups raw CastEvent[] for one spell into logical cast segments:
+//   instant  – no CAST_START; each damage/heal/aura is its own point
+//   cast     – CAST_START … SPELL_DAMAGE/MISSED (bar from start → landing)
+//   channel  – CAST_START … CHANNEL_STOP (bar spans full channel; ticks inside)
+
+interface CastSegment {
+  type: 'instant' | 'cast' | 'channel'
+  startMs: number
+  endMs: number
+  events: CastEvent[]   // damage/heal ticks to render as dots
+}
+
+const OPEN_FLAGS = new Set(['SPELL_CAST_START', 'SPELL_CHANNEL_START'])
+const SKIP_FLAGS = new Set(['SPELL_CAST_SUCCESS'])   // bookkeeping only, no dot
+
+function groupIntoCasts(events: CastEvent[]): CastSegment[] {
+  const segs: CastSegment[] = []
+  let cur: CastSegment | null = null
+
   for (const ev of events) {
-    if (ev[1] === 'SPELL_CAST_START') {
-      pendingMs = ev[0]
-    } else if (pendingMs !== null && parsedAmount(ev) !== '') {
-      if (ev[0] > pendingMs) bars.push({ startMs: pendingMs, endMs: ev[0] })
-      pendingMs = null
+    const flag = ev[1]
+    const t    = ev[0]
+
+    if (flag === 'SPELL_CAST_START') {
+      if (cur) segs.push(cur)                      // interrupted cast — push as-is
+      cur = { type: 'cast', startMs: t, endMs: t, events: [] }
+
+    } else if (flag === 'SPELL_CHANNEL_START') {
+      if (cur) segs.push(cur)
+      cur = { type: 'channel', startMs: t, endMs: t, events: [] }
+
+    } else if (flag === 'SPELL_CHANNEL_STOP') {
+      if (cur) { cur.endMs = t; segs.push(cur); cur = null }
+
+    } else if (SKIP_FLAGS.has(flag)) {
+      // SPELL_CAST_SUCCESS: just advances the bar end for cast-type spells
+      if (cur && cur.type === 'cast') cur.endMs = t
+
+    } else {
+      // Damage, heal, miss, aura — a visible event
+      if (cur) {
+        cur.events.push(ev)
+        cur.endMs = t
+        if (cur.type === 'cast') { segs.push(cur); cur = null }  // cast lands → close
+      } else {
+        segs.push({ type: 'instant', startMs: t, endMs: t, events: [ev] })
+      }
     }
   }
-  return bars
+
+  if (cur) segs.push(cur)   // trailing cast (e.g. still in channel at fight end)
+  return segs
 }
 
 function onCastMove(e: MouseEvent): void {
@@ -340,27 +380,30 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
                 class="zero-mark"
                 :style="{ left: toPercent(0) + '%' }"
               />
-              <!-- Cast-time bars: translucent fill from CAST_START → damage landing -->
-              <div
-                v-for="(bar, bi) in castBars(row.events)"
-                :key="'bar' + bi"
-                class="cast-bar"
-                :style="{
-                  left:  toPercent(bar.startMs) + '%',
-                  width: Math.max(0, toPercent(bar.endMs) - toPercent(bar.startMs)) + '%',
-                  background: row.spell.color || 'var(--primary-dim)',
-                }"
-              />
-              <div
-                v-for="(ev, i) in row.events"
-                :key="i"
-                class="cast-tick"
-                :class="castClass(ev)"
-                :style="{ left: toPercent(ev[0]) + '%' }"
-                @mouseenter="onCastEnter(ev, row.spell.name, $event)"
-                @mousemove="onCastMove($event)"
-                @mouseleave="onCastLeave"
-              >{{ castLabel(ev) }}</div>
+
+              <template v-for="(seg, si) in groupIntoCasts(row.events)" :key="si">
+                <!-- Bar for cast-time and channeled spells -->
+                <div
+                  v-if="seg.type !== 'instant'"
+                  class="cast-bar"
+                  :class="seg.type === 'channel' ? 'cast-bar--channel' : ''"
+                  :style="{
+                    left:  toPercent(seg.startMs) + '%',
+                    width: Math.max(0.2, toPercent(seg.endMs) - toPercent(seg.startMs)) + '%',
+                  }"
+                />
+                <!-- Dots for each damage/heal/miss event within the segment -->
+                <div
+                  v-for="(ev, ei) in seg.events"
+                  :key="ei"
+                  class="cast-tick"
+                  :class="castClass(ev)"
+                  :style="{ left: toPercent(ev[0]) + '%' }"
+                  @mouseenter="onCastEnter(ev, row.spell.name, $event)"
+                  @mousemove="onCastMove($event)"
+                  @mouseleave="onCastLeave"
+                >{{ castLabel(ev) }}</div>
+              </template>
             </div>
           </div>
         </div>
@@ -614,9 +657,18 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   position: absolute;
   top: 15%;
   height: 70%;
-  opacity: 0.22;
+  background: hsl(271, 80%, 72%);
+  opacity: 0.32;
   border-radius: 1px;
   pointer-events: none;
+}
+
+/* Channeled spells: slightly brighter/taller so they read as "sustained" */
+.cast-bar--channel {
+  top: 10%;
+  height: 80%;
+  background: hsl(200, 70%, 65%);
+  opacity: 0.35;
 }
 
 .cast-dmg  { background: var(--primary-dim); }
