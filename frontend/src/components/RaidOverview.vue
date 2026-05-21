@@ -292,13 +292,13 @@ const dps = computed(() =>
 }
 
 .role-col {
-  flex: 0 0 auto;
-  min-width: 150px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .dps-col {
-  flex: 1 1 auto;
-  min-width: 150px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .player-row {
@@ -316,8 +316,8 @@ const dps = computed(() =>
 
 .pname {
   font-size: 13px;
-  flex-shrink: 0;
-  max-width: 90px;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -326,8 +326,7 @@ const dps = computed(() =>
 .spec-label {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 11px;
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
