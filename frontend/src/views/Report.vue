@@ -50,7 +50,10 @@ function clearBoss(): void {
 }
 
 function goPlayer(playerName: string): void {
-  router.push(`/reports/${reportId.value}/player/${encodeURIComponent(playerName)}`)
+  router.push({
+    path: `/reports/${reportId.value}/player/${encodeURIComponent(playerName)}`,
+    query: bossQuery.value,
+  })
 }
 
 const bosses        = computed(() => report.value?.SEGMENTS_LINKS ?? [])

@@ -29,8 +29,9 @@ export function usePlayer() {
     playerName: string,
     view: PlayerView = 'damage',
     targetGuid?: string,
+    bossParams?: Record<string, string>,
   ): Promise<void> {
-    const params = new URLSearchParams({ view })
+    const params = new URLSearchParams({ view, ...bossParams })
     if (targetGuid) params.set('target', targetGuid)
     await execute(`/api/v2/reports/${reportId}/player/${encodeURIComponent(playerName)}/?${params}`)
   }
