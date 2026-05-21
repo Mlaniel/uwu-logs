@@ -175,6 +175,11 @@ export interface RaidKill {
   damage: number[]
   heal: number[]
   taken: number[]
+  players?: {
+    damage: Record<string, number[]>
+    heal:   Record<string, number[]>
+    taken:  Record<string, number[]>
+  }
 }
 
 // Response from GET /api/v2/reports/:id/raid_graph/

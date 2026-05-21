@@ -163,6 +163,17 @@ function buildRaidLineData() {
   const kills = raidData.value?.kills
   if (!kills?.length) return null
 
+  const playerNames = new Set(props.players.map(p => p.name))
+
+  function sumFiltered(pool: Record<string, number[]> | undefined, fallback: number[], s: number): number {
+    if (!pool) return fallback[s] ?? 0
+    let total = 0
+    for (const [name, arr] of Object.entries(pool)) {
+      if (playerNames.has(name)) total += arr[s] ?? 0
+    }
+    return total
+  }
+
   const labels: string[] = []
   const dps: number[] = []
   const hps: number[] = []
@@ -170,12 +181,11 @@ function buildRaidLineData() {
 
   for (let i = 0; i < kills.length; i++) {
     const k = kills[i]
-    // First point of each kill labelled with boss name; rest with MM:SS
     for (let s = 0; s < k.labels.length; s++) {
       labels.push(s === 0 ? k.name : k.labels[s])
-      dps.push(k.damage[s] ?? 0)
-      hps.push(k.heal[s] ?? 0)
-      dtps.push(k.taken[s] ?? 0)
+      dps.push(sumFiltered(k.players?.damage, k.damage, s))
+      hps.push(sumFiltered(k.players?.heal,   k.heal,   s))
+      dtps.push(sumFiltered(k.players?.taken,  k.taken,  s))
     }
     // 1-second separator gap between kills
     if (i < kills.length - 1) {
@@ -231,9 +241,11 @@ function buildStackedDatasets() {
     return (cumul[end] ?? 0) - (start > 0 ? (cumul[start - 1] ?? 0) : 0)
   }
 
+  const filteredNames = new Set(props.players.map(p => p.name))
+
   // Lowest range-damage first → bottom of stack
   const sorted = Object.entries(players)
-    .filter(([name]) => !hiddenPlayers.value.has(name))
+    .filter(([name]) => !hiddenPlayers.value.has(name) && filteredNames.has(name))
     .sort(([, a], [, b]) => rangeDmg(a) - rangeDmg(b))
     .slice(0, 15)
 
@@ -251,8 +263,9 @@ function buildStackedDatasets() {
     }
   })
 
-  // Legend: highest range-damage first
+  // Legend: highest range-damage first, filtered to visible players
   const legendOrder = Object.entries(players)
+    .filter(([name]) => filteredNames.has(name))
     .sort(([, a], [, b]) => rangeDmg(b) - rangeDmg(a))
     .map(([name]) => name)
 

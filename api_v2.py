@@ -367,7 +367,7 @@ def raid_graph(report_id: str):
         return err
 
     def _sum_per_second(raw_dict: dict[str, dict[int, int]], n_secs: int) -> list[int]:
-        """Sum all players' values for each second. raw_dict: {player: {offset_tenth: amount}}."""
+        """Sum all players' values for each second."""
         result = []
         for sec in range(n_secs):
             total = 0
@@ -376,6 +376,18 @@ def raid_graph(report_id: str):
                     total += offsets.get(sec * 10 + tenth, 0)
             result.append(total)
         return result
+
+    def _per_player_per_second(raw_dict: dict[str, dict[int, int]], n_secs: int) -> dict[str, list[int]]:
+        """Per-player per-second arrays for frontend spec filtering."""
+        out: dict[str, list[int]] = {}
+        for player, offsets in raw_dict.items():
+            arr = []
+            for sec in range(n_secs):
+                total = sum(offsets.get(sec * 10 + tenth, 0) for tenth in range(10))
+                arr.append(total)
+            if any(arr):
+                out[player] = arr
+        return out
 
     def _n_secs(*raw_dicts: dict[str, dict[int, int]]) -> int:
         best = 0
@@ -410,6 +422,11 @@ def raid_graph(report_id: str):
             "damage": _sum_per_second(dmg_raw, n),
             "heal":   _sum_per_second(heal_raw, n),
             "taken":  _sum_per_second(taken_raw, n),
+            "players": {
+                "damage": _per_player_per_second(dmg_raw, n),
+                "heal":   _per_player_per_second(heal_raw, n),
+                "taken":  _per_player_per_second(taken_raw, n),
+            },
         })
 
     return jsonify({"kills": kills_out})
