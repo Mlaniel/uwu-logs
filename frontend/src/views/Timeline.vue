@@ -59,6 +59,17 @@ watch([selectedAttempt, selectedPlayer], runFetch)
 // ── Timeline rendering ────────────────────────────────────────────────────────
 const duration = computed(() => data.value?.RDURATION ?? 0)
 
+const ownSpellsOnly = ref(false)
+
+const displayRows = computed(() => {
+  if (!ownSpellsOnly.value) return rows.value
+  const self = data.value?.NAME
+  if (!self) return rows.value
+  return rows.value
+    .map(r => ({ ...r, events: r.events.filter(ev => ev[2] === self) }))
+    .filter(r => r.events.length > 0)
+})
+
 // How many seconds before 0:00 to show (0–60). Adjustable via slider.
 const startOffset = ref(0)
 
@@ -221,6 +232,10 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
             class="offset-slider"
           />
         </div>
+        <label class="own-spells-check">
+          <input type="checkbox" v-model="ownSpellsOnly" />
+          Own spells only
+        </label>
         <div v-if="selectedAttempt" class="attempt-info">
           {{ selectedAttempt.encounter_name }} —
           {{ selectedAttempt.difficulty }} —
@@ -262,7 +277,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 
           <!-- Spell rows -->
           <div
-            v-for="row in rows"
+            v-for="row in displayRows"
             :key="row.spell_id"
             class="spell-row"
           >
@@ -385,6 +400,21 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   accent-color: var(--primary);
   cursor: pointer;
 }
+
+.own-spells-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  align-self: flex-end;
+  padding-bottom: 4px;
+}
+
+.own-spells-check:hover { color: var(--text); }
+.own-spells-check input { accent-color: var(--primary); cursor: pointer; }
 
 .attempt-info {
   font-family: 'Barlow Condensed', sans-serif;
