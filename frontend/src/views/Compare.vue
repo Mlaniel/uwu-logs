@@ -98,6 +98,10 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
           @deselect="clearBoss"
         />
       </BasePage>
+      <nav class="sidebar-nav">
+        <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
+        <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
+      </nav>
     </aside>
 
     <!-- Main content -->

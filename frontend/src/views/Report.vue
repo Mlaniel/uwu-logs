@@ -267,31 +267,6 @@ const displayPlayers = computed<Player[]>(() => {
   border-bottom: 1px solid var(--table-border);
 }
 
-/* Sidebar navigation links (Timeline / Compare) */
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  padding: 6px 0;
-  border-top: 1px solid var(--table-border);
-  margin-top: auto;
-}
-
-.sidebar-nav-link {
-  padding: 7px 14px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-
-.sidebar-nav-link:hover,
-.sidebar-nav-link.router-link-active {
-  color: var(--text);
-  background: var(--hover-row);
-}
 
 /* ── Raid segment filter ─────────────────────────────────────────────────── */
 
