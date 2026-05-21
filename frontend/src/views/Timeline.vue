@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch, ref, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useTimeline } from '../composables/useTimeline'
 import { useFetch } from '../composables/useFetch'
@@ -9,6 +9,7 @@ import BossSelector from '../components/BossSelector.vue'
 import type { BossAttempt, DeathApiResponse, CastEvent } from '../types/api'
 
 const route = useRoute()
+const router = useRouter()
 const reportId = computed(() => route.params.id as string)
 
 const { report, loading: reportLoading, fetchOverview } = useReport()
@@ -28,19 +29,39 @@ const playerNames = computed<string[]>(() => {
   return Object.keys(report.value.SPECS).filter(n => n !== 'Total').sort()
 })
 
-// Auto-select first kill attempt + first player when report loads
+// Restore boss + player from URL, or fall back to first kill attempt
 watch(() => bosses.value, bgs => {
-  if (!selectedAttempt.value && bgs.length) {
-    const firstKillGroup = bgs.find(bg => bg.boss_name !== 'all' && bg.segments.some(s => s.attempt_type === 'kill'))
-    if (firstKillGroup) {
-      const kill = [...firstKillGroup.segments].reverse().find(s => s.attempt_type === 'kill')
-      if (kill) selectedAttempt.value = kill
+  if (selectedAttempt.value || !bgs.length) return
+  const qs = route.query.s as string | undefined
+  const qf = route.query.f as string | undefined
+  if (qs && qf) {
+    for (const bg of bgs) {
+      const found = bg.segments.find(seg => {
+        const p = new URLSearchParams(seg.href.slice(1))
+        return p.get('s') === qs && p.get('f') === qf
+      })
+      if (found) { selectedAttempt.value = found; return }
     }
+  }
+  const firstKillGroup = bgs.find(bg => bg.boss_name !== 'all' && bg.segments.some(s => s.attempt_type === 'kill'))
+  if (firstKillGroup) {
+    const kill = [...firstKillGroup.segments].reverse().find(s => s.attempt_type === 'kill')
+    if (kill) selectedAttempt.value = kill
   }
 }, { immediate: true })
 
 watch(playerNames, names => {
-  if (names.length && !selectedPlayer.value) selectedPlayer.value = names[0]
+  if (!names.length || selectedPlayer.value) return
+  const urlPlayer = route.query.player as string | undefined
+  selectedPlayer.value = (urlPlayer && names.includes(urlPlayer)) ? urlPlayer : names[0]
+})
+
+// Keep URL in sync so navigating away and back preserves state
+watch([selectedAttempt, selectedPlayer], ([attempt, player]) => {
+  if (!attempt) return
+  const params = Object.fromEntries(new URLSearchParams(attempt.href.slice(1)))
+  if (player) params.player = player
+  router.replace({ query: params })
 })
 
 function selectAttempt(attempt: BossAttempt): void {

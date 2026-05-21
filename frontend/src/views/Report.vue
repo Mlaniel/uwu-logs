@@ -57,6 +57,11 @@ const bosses        = computed(() => report.value?.SEGMENTS_LINKS ?? [])
 const reportTitle   = computed(() => report.value?.REPORT_NAME ?? '')
 const reportDuration = computed(() => report.value?.DURATION_STR ?? '')
 
+const bossQuery = computed(() => {
+  if (!selectedHref.value) return {}
+  return Object.fromEntries(new URLSearchParams(selectedHref.value.slice(1)))
+})
+
 // ── Time-range selection ───────────────────────────────────────────────────
 
 interface RangeSelection { startIdx: number; endIdx: number }
@@ -211,8 +216,8 @@ const displayPlayers = computed<Player[]>(() => {
       />
       <nav class="sidebar-nav">
         <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
-        <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
-        <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
+        <router-link :to="{ path: `/reports/${reportId}/timeline`, query: bossQuery }" class="sidebar-nav-link">Timeline</router-link>
+        <router-link :to="{ path: `/reports/${reportId}/compare`, query: bossQuery }" class="sidebar-nav-link">Compare</router-link>
       </nav>
     </aside>
 
