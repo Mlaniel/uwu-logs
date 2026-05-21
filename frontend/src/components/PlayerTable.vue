@@ -138,11 +138,11 @@ function fmtRate(v: number): string {
 /* ── Header ──────────────────────────────────────────────────────────────── */
 
 .hdr {
-  height: 26px;
+  height: 34px;
   border-bottom: 1px solid var(--table-border);
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -155,7 +155,7 @@ function fmtRate(v: number): string {
 /* ── Data rows ───────────────────────────────────────────────────────────── */
 
 .data-row {
-  height: 30px;
+  height: 40px;
   border-bottom: 1px solid var(--table-border);
   cursor: pointer;
 }
@@ -170,10 +170,10 @@ function fmtRate(v: number): string {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 8px;
+  padding: 0 10px;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 17px;
 }
 .col-name span {
   overflow: hidden;
@@ -183,17 +183,17 @@ function fmtRate(v: number): string {
 
 /* Active% and Casts — compact */
 .col-sm {
-  width: 62px;
+  width: 82px;
   flex-shrink: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   text-align: right;
 }
 
 /* Stat value (Damage / Heal / Taken) */
 .col-val {
-  width: 80px;
+  width: 106px;
   flex-shrink: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   text-align: right;
 }
 
@@ -201,16 +201,16 @@ function fmtRate(v: number): string {
 .col-bar {
   width: 130px;
   flex-shrink: 0;
-  padding: 0 6px;
+  padding: 0 8px;
   display: flex;
   align-items: center;
 }
 
 /* Rate (DPS / HPS / DTPS) */
 .col-rate {
-  width: 68px;
+  width: 90px;
   flex-shrink: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   text-align: right;
 }
 
@@ -225,7 +225,7 @@ function fmtRate(v: number): string {
 .bar-fill {
   width: var(--pct, 0%);
   max-width: 100%;
-  height: 10px;
+  height: 13px;
   background: var(--clr, rgba(255,255,255,0.1));
   border-radius: 1px;
 }
@@ -237,7 +237,7 @@ function fmtRate(v: number): string {
 .col-rate {
   font-family: 'Barlow Condensed', sans-serif;
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .spec-icon {

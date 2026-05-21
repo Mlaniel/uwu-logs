@@ -55,11 +55,11 @@ defineProps<{
 .spell-thead,
 .spell-row {
   display: grid;
-  grid-template-columns: 28px 1fr 60px 48px 100px 120px;
+  grid-template-columns: 32px 1fr 72px 58px 120px 140px;
   align-items: center;
-  height: 36px;
-  padding: 0 4px;
-  gap: 4px;
+  height: 48px;
+  padding: 0 6px;
+  gap: 6px;
 }
 
 .spell-thead {
@@ -82,8 +82,8 @@ defineProps<{
 }
 
 .spell-icon {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   display: block;
 }
 
