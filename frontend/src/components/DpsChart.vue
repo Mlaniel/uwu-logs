@@ -160,11 +160,10 @@ function fmtDamage(v: number): string {
 // Kill boundary markers for the full-raid chart — set by buildRaidLineData.
 const raidKillBoundaries = ref<{ name: string; idx: number; end_idx: number; is_kill: boolean }[]>([])
 
-// Full-raid line chart: concatenate all kills' per-second DPS/HPS/DTPS,
-// separated by a 1-second zero gap for visual clarity between bosses.
+// Full-raid continuous timeline: single flat per-second arrays from raid start to end.
 function buildRaidLineData() {
-  const kills = raidData.value?.kills
-  if (!kills?.length) return null
+  const rd = raidData.value
+  if (!rd?.labels?.length) return null
 
   const playerNames = new Set(props.players.map(p => p.name))
 
@@ -177,35 +176,23 @@ function buildRaidLineData() {
     return total
   }
 
-  const labels: string[] = []
+  const n = rd.labels.length
   const dps: number[] = []
   const hps: number[] = []
   const dtps: number[] = []
-  const boundaries: { name: string; idx: number }[] = []
-  let cursor = 0
 
-  for (let i = 0; i < kills.length; i++) {
-    const k = kills[i]
-    const startIdx = cursor
-    for (let s = 0; s < k.labels.length; s++) {
-      labels.push(k.labels[s])
-      dps.push(sumFiltered(k.players?.damage, k.damage, s))
-      hps.push(sumFiltered(k.players?.heal,   k.heal,   s))
-      dtps.push(sumFiltered(k.players?.taken,  k.taken,  s))
-    }
-    cursor += k.labels.length
-    boundaries.push({ name: k.name, idx: startIdx, end_idx: cursor - 1, is_kill: k.is_kill ?? true })
-    // 1-second separator gap between kills
-    if (i < kills.length - 1) {
-      labels.push('')
-      dps.push(0)
-      hps.push(0)
-      dtps.push(0)
-      cursor += 1
-    }
+  for (let s = 0; s < n; s++) {
+    dps.push(sumFiltered(rd.players?.damage, rd.damage, s))
+    hps.push(sumFiltered(rd.players?.heal,   rd.heal,   s))
+    dtps.push(sumFiltered(rd.players?.taken,  rd.taken,  s))
   }
 
-  raidKillBoundaries.value = boundaries
+  raidKillBoundaries.value = (rd.boss_regions ?? []).map(r => ({
+    name:    r.name,
+    idx:     r.start_sec,
+    end_idx: r.end_sec,
+    is_kill: r.is_kill,
+  }))
 
   const datasets = [
     {
@@ -236,7 +223,7 @@ function buildRaidLineData() {
       tension: 0.3,
     },
   ]
-  return { labels, datasets }
+  return { labels: rd.labels, datasets }
 }
 
 function buildStackedDatasets() {

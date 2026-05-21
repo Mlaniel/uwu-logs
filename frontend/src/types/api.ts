@@ -167,25 +167,27 @@ export interface AllGraphData {
   taken: DamageGraphData | null
 }
 
-// One kill segment from GET /api/v2/reports/:id/raid_graph/
-// damage/heal/taken: per-second summed values (not cumulative) across all players.
-export interface RaidKill {
-  name: string
-  is_kill: boolean
-  labels: string[]
-  damage: number[]
-  heal: number[]
-  taken: number[]
+// One boss encounter region within the full raid timeline.
+export interface BossRegion {
+  name:      string
+  is_kill:   boolean
+  start_sec: number   // second offset from raid start
+  end_sec:   number
+}
+
+// Response from GET /api/v2/reports/:id/raid_graph/
+// Single continuous timeline covering the full raid (trash included).
+export interface RaidGraphData {
+  labels:   string[]
+  damage:   number[]
+  heal:     number[]
+  taken:    number[]
   players?: {
     damage: Record<string, number[]>
     heal:   Record<string, number[]>
     taken:  Record<string, number[]>
   }
-}
-
-// Response from GET /api/v2/reports/:id/raid_graph/
-export interface RaidGraphData {
-  kills: RaidKill[]
+  boss_regions: BossRegion[]
 }
 
 // Response from GET /api/v2/reports/:id/deaths/

@@ -353,21 +353,26 @@ def damage_graph(report_id: str):
 
 
 # ─── GET /api/v2/reports/<id>/raid_graph/ ────────────────────────────────────
-# Returns per-second summed DPS/HPS/DTPS for each kill in the raid, in order.
-# Each kill is normalized to start at second 0. A 1-second zero gap separates
-# kills so the chart has a visual break between bosses.
+# Returns a single continuous DPS/HPS/DTPS timeline for the full raid night
+# (first encounter start → last encounter end), including trash between bosses.
+# Boss encounter regions are returned as annotations so the frontend can shade them.
 #
-# Response: { kills: [{ name, labels, damage, heal, taken }] }
-# damage/heal/taken are per-second integers (already summed across all players).
+# Response: {
+#   labels: ["0:00", ...],          # one per second
+#   damage/heal/taken: [int, ...],  # summed across all players
+#   players: { damage/heal/taken: { name: [int, ...] } },
+#   boss_regions: [{ name, is_kill, start_sec, end_sec }]
+# }
 
 @apiv2_bp.route("/reports/<report_id>/raid_graph/")
 def raid_graph(report_id: str):
+    from logs_dps import to_int as _to_int
+
     report, err = _load_report(report_id)
     if err:
         return err
 
     def _sum_per_second(raw_dict: dict[str, dict[int, int]], n_secs: int) -> list[int]:
-        """Sum all players' values for each second."""
         result = []
         for sec in range(n_secs):
             total = 0
@@ -378,65 +383,73 @@ def raid_graph(report_id: str):
         return result
 
     def _per_player_per_second(raw_dict: dict[str, dict[int, int]], n_secs: int) -> dict[str, list[int]]:
-        """Per-player per-second arrays for frontend spec filtering."""
         out: dict[str, list[int]] = {}
         for player, offsets in raw_dict.items():
-            arr = []
-            for sec in range(n_secs):
-                total = sum(offsets.get(sec * 10 + tenth, 0) for tenth in range(10))
-                arr.append(total)
+            arr = [sum(offsets.get(sec * 10 + t, 0) for t in range(10)) for sec in range(n_secs)]
             if any(arr):
                 out[player] = arr
         return out
 
-    def _n_secs(*raw_dicts: dict[str, dict[int, int]]) -> int:
-        best = 0
-        for raw in raw_dicts:
-            for offsets in raw.values():
-                if offsets:
-                    best = max(best, max(offsets.keys(), default=0))
-        return best // 10 + 1 if best else 0
-
-    # All boss segments (kills + wipes) in chronological order
+    # All boss segments sorted chronologically
     all_segments = sorted(
         (seg for segs in report.SEGMENTS.values() for seg in segs),
         key=lambda s: s.start,
     )
+    if not all_segments:
+        return jsonify({"labels": [], "damage": [], "heal": [], "taken": [], "players": {}, "boss_regions": []})
 
-    kills_out = []
-    for segment in all_segments:
-        s, f = segment.start, segment.end
-        try:
-            dmg_raw   = report.get_all_players_raw(s, f)
-            heal_raw  = report.get_all_players_raw_heal(s, f)
-            taken_raw = report.get_all_players_raw_taken(s, f)
-        except Exception:
-            continue
+    raid_s = all_segments[0].start
+    raid_f = all_segments[-1].end
 
-        n = _n_secs(dmg_raw, heal_raw, taken_raw)
-        if n == 0:
-            continue
+    try:
+        dmg_raw   = report.get_all_players_raw(raid_s, raid_f)
+        heal_raw  = report.get_all_players_raw_heal(raid_s, raid_f)
+        taken_raw = report.get_all_players_raw_taken(raid_s, raid_f)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
-        labels = []
-        for sec in range(n):
-            m, sv = divmod(sec, 60)
-            labels.append(f"{m}:{sv:02d}")
+    all_offsets = (
+        list(dmg_raw.values()) + list(heal_raw.values()) + list(taken_raw.values())
+    )
+    best = max((max(o.keys(), default=0) for o in all_offsets if o), default=0)
+    n_secs = best // 10 + 1 if best else 0
 
-        kills_out.append({
-            "name":    segment.encounter_name,
-            "is_kill": segment.is_kill(),
-            "labels":  labels,
-            "damage":  _sum_per_second(dmg_raw, n),
-            "heal":    _sum_per_second(heal_raw, n),
-            "taken":   _sum_per_second(taken_raw, n),
-            "players": {
-                "damage": _per_player_per_second(dmg_raw, n),
-                "heal":   _per_player_per_second(heal_raw, n),
-                "taken":  _per_player_per_second(taken_raw, n),
-            },
+    if n_secs == 0:
+        return jsonify({"labels": [], "damage": [], "heal": [], "taken": [], "players": {}, "boss_regions": []})
+
+    labels = [f"{m}:{sv:02d}" for sec in range(n_secs) for m, sv in [divmod(sec, 60)]]
+
+    # Convert boss segment timestamps → second offsets from raid start
+    first_ts = _to_int(report.LOGS[raid_s].split(",", 1)[0][-9:-2])
+
+    def _ts_offset(log_idx: int) -> int:
+        ts = _to_int(report.LOGS[log_idx].split(",", 1)[0][-9:-2])
+        diff = ts - first_ts
+        if diff < 0:
+            diff += 36000   # midnight rollover
+        return diff // 10
+
+    boss_regions = []
+    for seg in all_segments:
+        boss_regions.append({
+            "name":      seg.encounter_name,
+            "is_kill":   seg.is_kill(),
+            "start_sec": _ts_offset(seg.start),
+            "end_sec":   _ts_offset(max(seg.start, seg.end - 1)),
         })
 
-    return jsonify({"kills": kills_out})
+    return jsonify({
+        "labels":  labels,
+        "damage":  _sum_per_second(dmg_raw, n_secs),
+        "heal":    _sum_per_second(heal_raw, n_secs),
+        "taken":   _sum_per_second(taken_raw, n_secs),
+        "players": {
+            "damage": _per_player_per_second(dmg_raw, n_secs),
+            "heal":   _per_player_per_second(heal_raw, n_secs),
+            "taken":  _per_player_per_second(taken_raw, n_secs),
+        },
+        "boss_regions": boss_regions,
+    })
 
 
 # ─── SPA catch-all (add last in Z_SERVER.py, not here) ───────────────────────

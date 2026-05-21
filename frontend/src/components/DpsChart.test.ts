@@ -6,7 +6,14 @@ import { makePlayer, makeHealer } from '../test/fixtures'
 
 // Stub useFetch so raid_graph calls resolve with minimal data immediately.
 vi.mock('../composables/useFetch', () => {
-  const mockRaid = { kills: [{ name: 'Boss', labels: ['0:00', '0:01'], damage: [1000, 1100], heal: [500, 550], taken: [200, 210] }] }
+  const mockRaid = {
+    labels: ['0:00', '0:01', '0:02'],
+    damage: [1000, 1100, 900],
+    heal: [500, 550, 480],
+    taken: [200, 210, 190],
+    players: { damage: {}, heal: {}, taken: {} },
+    boss_regions: [{ name: 'Boss', is_kill: true, start_sec: 0, end_sec: 2 }],
+  }
   return {
     useFetch: () => {
       const data = shallowRef<unknown>(null)
