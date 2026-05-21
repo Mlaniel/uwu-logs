@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue'
+import { computed, watch, ref, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useTimeline } from '../composables/useTimeline'
@@ -55,6 +55,12 @@ function runFetch(): void {
 }
 
 watch([selectedAttempt, selectedPlayer], runFetch)
+
+// After Vue renders new spell rows, tell the WoWhead widget to scan for new links.
+watch(displayRows, async () => {
+  await nextTick()
+  ;(window as any).$WowheadPower?.refreshLinks?.()
+})
 
 // ── Timeline rendering ────────────────────────────────────────────────────────
 const duration = computed(() => data.value?.RDURATION ?? 0)
@@ -282,16 +288,23 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
             class="spell-row"
           >
             <div class="label-col spell-label">
-              <img
-                v-if="row.spell.icon"
-                :src="`/static/icons/${row.spell.icon}.jpg`"
-                :alt="row.spell.name"
-                class="spell-icon"
-              />
-              <span
-                class="spell-name"
-                :style="{ color: row.spell.color || undefined }"
-              >{{ row.spell.name }}</span>
+              <a
+                class="spell-wh-link"
+                :href="`https://www.wowhead.com/wotlk/spell=${row.spell_id}`"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  v-if="row.spell.icon"
+                  :src="`/static/icons/${row.spell.icon}.jpg`"
+                  :alt="row.spell.name"
+                  class="spell-icon"
+                />
+                <span
+                  class="spell-name"
+                  :style="{ color: row.spell.color || undefined }"
+                >{{ row.spell.name }}</span>
+              </a>
             </div>
 
             <div class="spell-track">
@@ -511,9 +524,23 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 .spell-label {
   display: flex;
   align-items: center;
-  gap: 5px;
   padding-right: 8px;
   overflow: hidden;
+}
+
+.spell-wh-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.spell-wh-link:hover .spell-name {
+  text-decoration: underline;
 }
 
 .spell-icon {
