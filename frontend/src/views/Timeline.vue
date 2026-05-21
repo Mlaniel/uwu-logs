@@ -109,6 +109,65 @@ function fmtSeconds(s: number): string {
   return `${sign}${m}:${String(rem).padStart(2, '0')}`
 }
 
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+
+interface TooltipState {
+  x: number; y: number
+  spellName: string
+  target: string
+  amount: string
+  time: string
+}
+
+const tooltip = ref<TooltipState | null>(null)
+
+function fmtAmount(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M'
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k'
+  return String(n)
+}
+
+function parsedAmount(ev: CastEvent): string {
+  const flag = ev[1]
+  const etc  = String(ev[5] ?? '')
+  const raw  = parseInt(etc.split(',')[0])
+  if (!raw || isNaN(raw)) return ''
+  const n = fmtAmount(raw)
+  if (flag.includes('HEAL'))   return `+${n}`
+  if (flag.includes('DAMAGE')) return `-${n}`
+  return n
+}
+
+function fmtDeltaMs(ms: number): string {
+  const sign = ms < 0 ? '-' : ''
+  const abs  = Math.abs(ms)
+  const m    = Math.floor(abs / 60_000)
+  const s    = ((abs % 60_000) / 1000).toFixed(1)
+  return `${sign}${m}:${s.padStart(4, '0')}`
+}
+
+function onCastEnter(ev: CastEvent, spellName: string, e: MouseEvent): void {
+  tooltip.value = {
+    x: e.clientX,
+    y: e.clientY,
+    spellName,
+    target: ev[3] || '—',
+    amount: parsedAmount(ev),
+    time:   fmtDeltaMs(ev[0]),
+  }
+}
+
+function onCastLeave(): void {
+  tooltip.value = null
+}
+
+function onCastMove(e: MouseEvent): void {
+  if (tooltip.value) {
+    tooltip.value.x = e.clientX
+    tooltip.value.y = e.clientY
+  }
+}
+
 const ticks = computed<number[]>(() => {
   const result: number[] = []
   const startSec  = -startOffset.value
@@ -221,17 +280,48 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
             </div>
 
             <div class="spell-track">
+              <!-- 0:00 fight-start line through every row -->
+              <div
+                v-if="startOffset > 0"
+                class="zero-mark"
+                :style="{ left: toPercent(0) + '%' }"
+              />
               <div
                 v-for="(ev, i) in row.events"
                 :key="i"
                 class="cast-tick"
                 :class="castClass(ev)"
                 :style="{ left: toPercent(ev[0]) + '%' }"
-                :title="`${row.spell.name} — ${(ev[0]/1000).toFixed(2)}s — ${ev[1]}`"
+                @mouseenter="onCastEnter(ev, row.spell.name, $event)"
+                @mousemove="onCastMove($event)"
+                @mouseleave="onCastLeave"
               >{{ castLabel(ev) }}</div>
             </div>
           </div>
         </div>
+
+        <!-- Floating tooltip -->
+        <Teleport to="body">
+          <div
+            v-if="tooltip"
+            class="cast-tooltip"
+            :style="{ left: tooltip.x + 14 + 'px', top: tooltip.y - 10 + 'px' }"
+          >
+            <div class="tt-spell">{{ tooltip.spellName }}</div>
+            <div class="tt-row">
+              <span class="tt-label">Target</span>
+              <span>{{ tooltip.target }}</span>
+            </div>
+            <div v-if="tooltip.amount" class="tt-row">
+              <span class="tt-label">Amount</span>
+              <span :class="tooltip.amount.startsWith('+') ? 'tt-heal' : tooltip.amount.startsWith('-') ? 'tt-dmg' : ''">{{ tooltip.amount }}</span>
+            </div>
+            <div class="tt-row">
+              <span class="tt-label">Time</span>
+              <span class="tt-time">{{ tooltip.time }}</span>
+            </div>
+          </div>
+        </Teleport>
 
         <p v-else-if="!timelineLoading && selectedAttempt" class="empty">
           Select a player to load their timeline.
@@ -435,4 +525,47 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   color: var(--text-muted);
   font-size: 0.875rem;
 }
+</style>
+
+<style>
+/* Tooltip is teleported to <body> — cannot be scoped */
+.cast-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--table-border, #333);
+  border-radius: 4px;
+  padding: 7px 10px;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.tt-spell {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text, #e0e0e0);
+  margin-bottom: 5px;
+  white-space: nowrap;
+}
+
+.tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  color: var(--text, #e0e0e0);
+  line-height: 1.6;
+}
+
+.tt-label {
+  color: var(--text-muted, #666);
+  flex-shrink: 0;
+}
+
+.tt-heal { color: var(--kill, #48bb78); font-variant-numeric: tabular-nums; }
+.tt-dmg  { color: #ef5454;              font-variant-numeric: tabular-nums; }
+.tt-time { font-variant-numeric: tabular-nums; }
 </style>
