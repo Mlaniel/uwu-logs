@@ -300,33 +300,33 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
           </div>
         </div>
 
-        <!-- Floating tooltip -->
-        <Teleport to="body">
-          <div
-            v-if="tooltip"
-            class="cast-tooltip"
-            :style="{ left: tooltip.x + 14 + 'px', top: tooltip.y - 10 + 'px' }"
-          >
-            <div class="tt-spell">{{ tooltip.spellName }}</div>
-            <div class="tt-row">
-              <span class="tt-label">Target</span>
-              <span>{{ tooltip.target }}</span>
-            </div>
-            <div v-if="tooltip.amount" class="tt-row">
-              <span class="tt-label">Amount</span>
-              <span :class="tooltip.amount.startsWith('+') ? 'tt-heal' : tooltip.amount.startsWith('-') ? 'tt-dmg' : ''">{{ tooltip.amount }}</span>
-            </div>
-            <div class="tt-row">
-              <span class="tt-label">Time</span>
-              <span class="tt-time">{{ tooltip.time }}</span>
-            </div>
-          </div>
-        </Teleport>
-
         <p v-else-if="!timelineLoading && selectedAttempt" class="empty">
           Select a player to load their timeline.
         </p>
       </BasePage>
+
+      <!-- Floating tooltip — outside BasePage so it doesn't break v-if/v-else-if -->
+      <Teleport to="body">
+        <div
+          v-if="tooltip"
+          class="cast-tooltip"
+          :style="{ left: tooltip.x + 14 + 'px', top: tooltip.y - 10 + 'px' }"
+        >
+          <div class="tt-spell">{{ tooltip.spellName }}</div>
+          <div class="tt-row">
+            <span class="tt-label">Target</span>
+            <span>{{ tooltip.target }}</span>
+          </div>
+          <div v-if="tooltip.amount" class="tt-row">
+            <span class="tt-label">Amount</span>
+            <span :class="tooltip.amount.startsWith('+') ? 'tt-heal' : tooltip.amount.startsWith('-') ? 'tt-dmg' : ''">{{ tooltip.amount }}</span>
+          </div>
+          <div class="tt-row">
+            <span class="tt-label">Time</span>
+            <span class="tt-time">{{ tooltip.time }}</span>
+          </div>
+        </div>
+      </Teleport>
     </main>
   </div>
 </template>
