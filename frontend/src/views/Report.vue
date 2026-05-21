@@ -14,7 +14,7 @@ import type { BossAttempt, AllGraphData, Player } from '../types/api'
 const route = useRoute()
 const router = useRouter()
 const { report, players, loading, error, fetchOverview } = useReport()
-const { activeView, setView, specFilter, sortKey, sortDir, filteredPlayers, setSort, toggleSpec } = useFilters(players)
+const { activeView, specFilter, sortKey, sortDir, filteredPlayers, setSort, toggleSpec } = useFilters(players)
 
 const reportId = computed(() => route.params.id as string)
 
@@ -128,6 +128,10 @@ const displayPlayers = computed<Player[]>(() => {
         @select="selectBoss"
         @deselect="clearBoss"
       />
+      <nav class="sidebar-nav">
+        <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
+        <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
+      </nav>
     </aside>
 
     <!-- Main content -->
@@ -140,34 +144,7 @@ const displayPlayers = computed<Player[]>(() => {
           @toggle="toggleSpec"
         />
 
-        <!-- Primary tab bar: DAMAGE | HEAL | TAKEN | DEATHS | COMPARE -->
-        <div class="tab-bar">
-          <button
-            :class="{ active: activeView === 'damage' }"
-            @click="setView('damage')"
-          >Damage</button>
-          <button
-            :class="{ active: activeView === 'heal' }"
-            @click="setView('heal')"
-          >Heal</button>
-          <button
-            :class="{ active: activeView === 'taken' }"
-            @click="setView('taken')"
-          >Taken</button>
-          <router-link :to="`/reports/${reportId}/deaths`" class="tab-link">Deaths</router-link>
-          <router-link :to="`/reports/${reportId}/timeline`" class="tab-link">Timeline</router-link>
-          <router-link :to="`/reports/${reportId}/compare`" class="tab-link">Compare</router-link>
-        </div>
-
-        <!-- Full Raid overview (shown only when no boss selected) -->
-        <RaidOverview
-          v-if="!selectedHref"
-          :bosses="bosses"
-          :players="players"
-          :duration="reportDuration"
-        />
-
-        <!-- Chart: grouped bar (full-raid) or stacked area (boss) -->
+        <!-- Chart: raid summary line (full-raid) or stacked area (boss) -->
         <DpsChart
           :players="filteredPlayers"
           :view="activeView"
@@ -175,6 +152,14 @@ const displayPlayers = computed<Player[]>(() => {
           :selected-href="selectedHref"
           @range-change="onRangeChange"
           @graph-data="onGraphData"
+        />
+
+        <!-- Full Raid overview — below chart so chart is always the primary visual -->
+        <RaidOverview
+          v-if="!selectedHref"
+          :bosses="bosses"
+          :players="players"
+          :duration="reportDuration"
         />
 
         <!-- Player table — receives range-derived stats when a range is active -->
@@ -200,21 +185,30 @@ const displayPlayers = computed<Player[]>(() => {
   border-bottom: 1px solid var(--table-border);
 }
 
-.tab-link {
-  padding: 6px 12px;
+/* Sidebar navigation links (Timeline / Compare) */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  border-top: 1px solid var(--table-border);
+  margin-top: auto;
+}
+
+.sidebar-nav-link {
+  padding: 7px 14px;
   font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8125rem;
   font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
   text-decoration: none;
-  border-bottom: 2px solid transparent;
 }
 
-.tab-link:hover,
-.tab-link.router-link-active {
+.sidebar-nav-link:hover,
+.sidebar-nav-link.router-link-active {
   color: var(--text);
-  border-bottom-color: var(--primary);
+  background: var(--hover-row);
 }
+
 </style>

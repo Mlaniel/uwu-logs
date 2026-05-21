@@ -1,7 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { shallowRef, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import DpsChart from './DpsChart.vue'
 import { makePlayer, makeHealer } from '../test/fixtures'
+
+// Stub useFetch so raid_graph calls resolve with minimal data immediately.
+vi.mock('../composables/useFetch', () => {
+  const mockRaid = { kills: [{ name: 'Boss', labels: ['0:00', '0:01'], damage: [1000, 1100], heal: [500, 550], taken: [200, 210] }] }
+  return {
+    useFetch: () => {
+      const data = shallowRef<unknown>(null)
+      const execute = vi.fn(async (url: string) => {
+        if (url.includes('raid_graph')) data.value = mockRaid
+      })
+      return { data, loading: ref(false), error: ref(null), execute, abort: vi.fn() }
+    },
+  }
+})
 
 // Chart.js uses canvas APIs not available in happy-dom; stub the whole module.
 vi.mock('chart.js', () => {
@@ -13,14 +28,13 @@ vi.mock('chart.js', () => {
   MockChart.register = vi.fn()
   return {
     Chart: MockChart,
-    BarController: {},
-    BarElement: {},
     LineController: {},
     LineElement: {},
     PointElement: {},
     CategoryScale: {},
     LinearScale: {},
     Tooltip: {},
+    Legend: {},
   }
 })
 

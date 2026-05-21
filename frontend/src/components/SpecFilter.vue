@@ -11,15 +11,28 @@ const emit = defineEmits<{
   toggle: [spec: string]
 }>()
 
-// Only show specs present in the current player list
+// WoW class order — alphabetical, same as CLASS_COLORS
+const CLASS_ORDER = [
+  'death-knight', 'druid', 'hunter', 'mage', 'paladin',
+  'priest', 'rogue', 'shaman', 'warlock', 'warrior',
+]
+
+// Only show specs present in the current player list, grouped by class
 const presentSpecs = computed(() => {
-  const seen = new Map<string, string>() // spec_name → spec_icon
+  const seen = new Map<string, { icon: string; class_name: string }>()
   for (const p of props.players) {
     if (!seen.has(p.spec_name)) {
-      seen.set(p.spec_name, p.spec_icon)
+      seen.set(p.spec_name, { icon: p.spec_icon, class_name: p.class_name })
     }
   }
-  return Array.from(seen.entries()).map(([name, icon]) => ({ name, icon }))
+  return Array.from(seen.entries())
+    .map(([name, { icon, class_name }]) => ({ name, icon, class_name }))
+    .sort((a, b) => {
+      const ai = CLASS_ORDER.indexOf(a.class_name)
+      const bi = CLASS_ORDER.indexOf(b.class_name)
+      if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+      return a.name.localeCompare(b.name)
+    })
 })
 
 function isSelected(specName: string): boolean {

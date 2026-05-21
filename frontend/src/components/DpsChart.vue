@@ -2,19 +2,17 @@
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
   Chart,
-  BarController, BarElement,
   LineController, LineElement, PointElement,
-  CategoryScale, LinearScale, Tooltip,
+  CategoryScale, LinearScale, Tooltip, Legend,
 } from 'chart.js'
-import type { Player, DamageGraphData, AllGraphData } from '../types/api'
+import type { Player, DamageGraphData, AllGraphData, RaidGraphData } from '../types/api'
 import type { PlayerView } from '../composables/useFilters'
 import { CLASS_COLORS } from '../constants/bosses'
 import { useFetch } from '../composables/useFetch'
 
 Chart.register(
-  BarController, BarElement,
   LineController, LineElement, PointElement,
-  CategoryScale, LinearScale, Tooltip,
+  CategoryScale, LinearScale, Tooltip, Legend,
 )
 
 interface RangeSelection { startIdx: number; endIdx: number }
@@ -42,6 +40,9 @@ const graphLoading = ref(false)
 const { data: dmgData, execute: fetchDmg } = useFetch<DamageGraphData>()
 const { data: healData, execute: fetchHeal } = useFetch<DamageGraphData>()
 const { data: takenData, execute: fetchTaken } = useFetch<DamageGraphData>()
+
+// Full-raid line chart data — fetched once when no boss is selected
+const { data: raidData, execute: fetchRaid } = useFetch<RaidGraphData>()
 
 // Graph data for the currently active chart view
 const graphData = computed<DamageGraphData | null>(() =>
@@ -156,38 +157,62 @@ function fmtDamage(v: number): string {
   return String(v)
 }
 
-// Full-raid bar chart: all 3 per-second metrics as grouped (non-stacked) bars,
-// players sorted by DPS descending.
-function buildBarData() {
-  const sorted = [...props.players]
-    .sort((a, b) =>
-      (b.useful?.per_second ?? b.damage.per_second) -
-      (a.useful?.per_second ?? a.damage.per_second)
-    )
-    .slice(0, 25)
+// Full-raid line chart: concatenate all kills' per-second DPS/HPS/DTPS,
+// separated by a 1-second zero gap for visual clarity between bosses.
+function buildRaidLineData() {
+  const kills = raidData.value?.kills
+  if (!kills?.length) return null
 
-  const labels = sorted.map(p => p.name)
+  const labels: string[] = []
+  const dps: number[] = []
+  const hps: number[] = []
+  const dtps: number[] = []
+
+  for (let i = 0; i < kills.length; i++) {
+    const k = kills[i]
+    // First point of each kill labelled with boss name; rest with MM:SS
+    for (let s = 0; s < k.labels.length; s++) {
+      labels.push(s === 0 ? k.name : k.labels[s])
+      dps.push(k.damage[s] ?? 0)
+      hps.push(k.heal[s] ?? 0)
+      dtps.push(k.taken[s] ?? 0)
+    }
+    // 1-second separator gap between kills
+    if (i < kills.length - 1) {
+      labels.push('')
+      dps.push(0)
+      hps.push(0)
+      dtps.push(0)
+    }
+  }
+
   const datasets = [
     {
       label: 'DPS',
-      data: sorted.map(p => p.useful?.per_second ?? p.damage.per_second),
-      backgroundColor: 'rgba(167,99,247,0.75)',
-      borderWidth: 0,
-      borderRadius: 2,
+      data: dps,
+      borderColor: 'rgba(167,99,247,0.9)',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
     },
     {
       label: 'HPS',
-      data: sorted.map(p => p.heal.per_second),
-      backgroundColor: 'rgba(72,187,120,0.75)',
-      borderWidth: 0,
-      borderRadius: 2,
+      data: hps,
+      borderColor: 'rgba(72,187,120,0.9)',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
     },
     {
       label: 'DTPS',
-      data: sorted.map(p => p.taken.per_second),
-      backgroundColor: 'rgba(239,84,84,0.75)',
-      borderWidth: 0,
-      borderRadius: 2,
+      data: dtps,
+      borderColor: 'rgba(239,84,84,0.9)',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
     },
   ]
   return { labels, datasets }
@@ -294,10 +319,11 @@ function rebuildChart() {
   } else {
     stackLegend.value = []
     localRange.value = null
-    const { labels, datasets } = buildBarData()
+    const rd = buildRaidLineData()
+    if (!rd) return
     chartInstance = new Chart(canvas.value, {
-      type: 'bar',
-      data: { labels, datasets },
+      type: 'line',
+      data: { labels: rd.labels, datasets: rd.datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -324,9 +350,10 @@ function rebuildChart() {
         scales: {
           x: {
             ticks: {
-              color: 'gainsboro',
+              color: '#5e5e5e',
               font: { family: 'Barlow Condensed', size: 11 },
-              maxRotation: 45,
+              maxTicksLimit: 20,
+              maxRotation: 0,
             },
             grid: { color: 'hsl(0, 0%, 8%)' },
           },
@@ -344,17 +371,25 @@ function rebuildChart() {
   }
 }
 
-// Fetch all 3 datasets when boss changes
+// Fetch data when boss selection changes
 watch(bossParam, (boss) => {
   localRange.value = null
   dmgData.value = null
   healData.value = null
   takenData.value = null
   emit('range-change', null)
+
   if (!boss) {
     emit('graph-data', { damage: null, heal: null, taken: null })
+    if (!raidData.value) {
+      graphLoading.value = true
+      fetchRaid(`/api/v2/reports/${props.reportId}/raid_graph/`).then(() => {
+        graphLoading.value = false
+      })
+    }
     return
   }
+
   graphLoading.value = true
   const base = `/api/v2/reports/${props.reportId}/damage_graph/${props.selectedHref}`
   Promise.all([
@@ -368,7 +403,7 @@ watch(bossParam, (boss) => {
 }, { immediate: true })
 
 watch(
-  [isLineMode, graphData, () => props.players, () => props.view],
+  [isLineMode, graphData, raidData, () => props.players, () => props.view],
   rebuildChart,
   { deep: false },
 )

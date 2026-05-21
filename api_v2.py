@@ -91,6 +91,29 @@ def report_overview(report_id: str):
     for key in ("PATH", "QUERY", "QUERY_NO_CUSTOM"):
         payload.pop(key, None)
 
+    # Compute active% and spell counts, aggregated across all selected segments
+    _active_secs_acc: dict[str, int] = {}
+    _total_secs = 0
+    _spell_counts: dict[str, int] = {}
+    for seg_s, seg_f in payload.get("SEGMENTS", []):
+        if seg_s is None or seg_f is None:
+            continue
+        try:
+            active_map, seg_dur = report.get_active_seconds_per_player(seg_s, seg_f)
+            _total_secs += seg_dur
+            for player, secs in active_map.items():
+                _active_secs_acc[player] = _active_secs_acc.get(player, 0) + secs
+            for player, count in report.get_spell_casts_per_player(seg_s, seg_f).items():
+                _spell_counts[player] = _spell_counts.get(player, 0) + count
+        except Exception:
+            pass
+
+    payload["ACTIVE_PCT"] = {
+        p: round(s / _total_secs * 100, 1) if _total_secs else 0.0
+        for p, s in _active_secs_acc.items()
+    }
+    payload["SPELL_COUNTS"] = _spell_counts
+
     return jsonify(payload)
 
 
@@ -327,6 +350,69 @@ def damage_graph(report_id: str):
             players_out[player_name] = arr
 
     return jsonify({"labels": labels, "players": players_out})
+
+
+# ─── GET /api/v2/reports/<id>/raid_graph/ ────────────────────────────────────
+# Returns per-second summed DPS/HPS/DTPS for each kill in the raid, in order.
+# Each kill is normalized to start at second 0. A 1-second zero gap separates
+# kills so the chart has a visual break between bosses.
+#
+# Response: { kills: [{ name, labels, damage, heal, taken }] }
+# damage/heal/taken are per-second integers (already summed across all players).
+
+@apiv2_bp.route("/reports/<report_id>/raid_graph/")
+def raid_graph(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    def _sum_per_second(raw_dict: dict[str, dict[int, int]], n_secs: int) -> list[int]:
+        """Sum all players' values for each second. raw_dict: {player: {offset_tenth: amount}}."""
+        result = []
+        for sec in range(n_secs):
+            total = 0
+            for offsets in raw_dict.values():
+                for tenth in range(10):
+                    total += offsets.get(sec * 10 + tenth, 0)
+            result.append(total)
+        return result
+
+    def _n_secs(*raw_dicts: dict[str, dict[int, int]]) -> int:
+        best = 0
+        for raw in raw_dicts:
+            for offsets in raw.values():
+                if offsets:
+                    best = max(best, max(offsets.keys(), default=0))
+        return best // 10 + 1 if best else 0
+
+    kills_out = []
+    for segment in report.SEGMENTS_KILLS:
+        s, f = segment.start, segment.end
+        try:
+            dmg_raw   = report.get_all_players_raw(s, f)
+            heal_raw  = report.get_all_players_raw_heal(s, f)
+            taken_raw = report.get_all_players_raw_taken(s, f)
+        except Exception:
+            continue
+
+        n = _n_secs(dmg_raw, heal_raw, taken_raw)
+        if n == 0:
+            continue
+
+        labels = []
+        for sec in range(n):
+            m, sv = divmod(sec, 60)
+            labels.append(f"{m}:{sv:02d}")
+
+        kills_out.append({
+            "name":   segment.encounter_name,
+            "labels": labels,
+            "damage": _sum_per_second(dmg_raw, n),
+            "heal":   _sum_per_second(heal_raw, n),
+            "taken":  _sum_per_second(taken_raw, n),
+        })
+
+    return jsonify({"kills": kills_out})
 
 
 # ─── SPA catch-all (add last in Z_SERVER.py, not here) ───────────────────────

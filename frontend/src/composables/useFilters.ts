@@ -4,7 +4,7 @@ import type { ComputedRef, Ref } from 'vue'
 import type { Player } from '../types/api'
 
 export type PlayerView = 'damage' | 'heal' | 'taken'
-export type SortKey = 'name' | 'useful_dmg' | 'dps' | 'heal' | 'hps' | 'taken' | 'dtps'
+export type SortKey = 'name' | 'useful_dmg' | 'dps' | 'heal' | 'hps' | 'taken' | 'dtps' | 'active_pct' | 'casts'
 
 const VALID_VIEWS = new Set<PlayerView>(['damage', 'heal', 'taken'])
 
@@ -20,6 +20,8 @@ function getPlayerSortValue(player: Player, key: SortKey): number {
   if (key === 'hps') return player.heal.per_second
   if (key === 'taken') return player.taken.per_second
   if (key === 'dtps') return player.taken.per_second
+  if (key === 'active_pct') return player.active_pct
+  if (key === 'casts') return player.casts
   return 0
 }
 

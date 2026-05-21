@@ -3,9 +3,10 @@ import { computed, watch, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useTimeline } from '../composables/useTimeline'
+import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
-import type { BossAttempt } from '../types/api'
-import type { CastEvent } from '../types/api'
+import BossSelector from '../components/BossSelector.vue'
+import type { BossAttempt, DeathApiResponse, CastEvent } from '../types/api'
 
 const route = useRoute()
 const reportId = computed(() => route.params.id as string)
@@ -14,57 +15,75 @@ const { report, loading: reportLoading, fetchOverview } = useReport()
 watch(reportId, id => fetchOverview(id), { immediate: true })
 
 const { data, rows, loading: timelineLoading, error, fetchTimeline } = useTimeline()
+const { data: deathData, execute: fetchDeaths } = useFetch<DeathApiResponse>()
 
-// Boss + attempt selection
 const selectedAttempt = ref<BossAttempt | null>(null)
 const selectedPlayer = ref<string>('')
 
-const allAttempts = computed<BossAttempt[]>(() => {
-  if (!report.value) return []
-  return report.value.SEGMENTS_LINKS
-    .filter(bg => bg.boss_name !== 'all')
-    .flatMap(bg => bg.segments)
-})
+const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
+const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
 
 const playerNames = computed<string[]>(() => {
   if (!report.value) return []
   return Object.keys(report.value.SPECS).filter(n => n !== 'Total').sort()
 })
 
-// Auto-select first attempt + first player
-watch(allAttempts, attempts => {
-  if (attempts.length && !selectedAttempt.value) selectedAttempt.value = attempts[0]
-})
+// Auto-select first kill attempt + first player when report loads
+watch(() => bosses.value, bgs => {
+  if (!selectedAttempt.value && bgs.length) {
+    const firstKillGroup = bgs.find(bg => bg.boss_name !== 'all' && bg.segments.some(s => s.attempt_type === 'kill'))
+    if (firstKillGroup) {
+      const kill = [...firstKillGroup.segments].reverse().find(s => s.attempt_type === 'kill')
+      if (kill) selectedAttempt.value = kill
+    }
+  }
+}, { immediate: true })
+
 watch(playerNames, names => {
   if (names.length && !selectedPlayer.value) selectedPlayer.value = names[0]
 })
 
-function runFetch() {
+function selectAttempt(attempt: BossAttempt): void {
+  selectedAttempt.value = attempt
+}
+
+function runFetch(): void {
   const attempt = selectedAttempt.value
   if (!attempt || !selectedPlayer.value) return
-  fetchTimeline(
-    reportId.value,
-    attempt.encounter_name,
-    attempt.attempt,
-    selectedPlayer.value,
-  )
+  fetchTimeline(reportId.value, attempt.encounter_name, attempt.attempt, selectedPlayer.value)
+  fetchDeaths(`/api/v2/reports/${reportId.value}/deaths/${attempt.href}`)
 }
 
 watch([selectedAttempt, selectedPlayer], runFetch)
 
 // ── Timeline rendering ────────────────────────────────────────────────────────
-const duration = computed(() => data.value?.RDURATION ?? 0)   // seconds
+const duration = computed(() => data.value?.RDURATION ?? 0)
 
-// Map a delta_ms value to a % position across the timeline track
 function toPercent(deltaMs: number): number {
   if (!duration.value) return 0
   return Math.min((deltaMs / (duration.value * 1000)) * 100, 100)
 }
 
+function fromStartMs(s: string): number {
+  const dotIdx = s.indexOf('.')
+  const msPart = dotIdx >= 0 ? Number(s.slice(dotIdx + 1)) : 0
+  const timePart = dotIdx >= 0 ? s.slice(0, dotIdx) : s
+  const [m, sec] = timePart.split(':').map(Number)
+  return (m * 60 + (sec || 0)) * 1000 + msPart
+}
+
+// Deaths for this fight — all players, positioned as markers on the ruler
+const deathMarkers = computed(() => {
+  if (!deathData.value) return []
+  return Object.values(deathData.value.DEATHS).map(d => ({
+    player: d.player,
+    ms: fromStartMs(d.from_start),
+    label: d.from_start.split('.')[0], // "MM:SS" without ms
+  }))
+})
+
 function castLabel(event: CastEvent): string {
-  const flag = event[1]
-  // Condense common flags to short labels
-  if (flag.includes('MISS')) return 'M'
+  if (event[1].includes('MISS')) return 'M'
   return ''
 }
 
@@ -76,46 +95,40 @@ function castClass(event: CastEvent): string {
   return 'cast-dmg'
 }
 
-// Format seconds → M:SS
 function fmtSeconds(s: number): string {
   const m = Math.floor(s / 60)
   const rem = Math.floor(s % 60)
   return `${m}:${String(rem).padStart(2, '0')}`
 }
 
-// Ruler tick marks every 30s
 const ticks = computed<number[]>(() => {
   const result: number[] = []
   for (let t = 0; t <= duration.value; t += 30) result.push(t)
   return result
 })
+
+const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 </script>
 
 <template>
-  <div class="timeline-page">
-    <header class="timeline-header">
-      <router-link :to="`/reports/${reportId}`" class="back-link">← Back</router-link>
-      <h1 class="timeline-title">Timeline</h1>
-    </header>
+  <div class="page-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="report-title">{{ reportTitle }}</div>
+      <BasePage :loading="reportLoading" :error="null">
+        <BossSelector
+          :bosses="bosses"
+          :selected-href="selectedHref"
+          @select="selectAttempt"
+          @deselect="() => {}"
+        />
+      </BasePage>
+    </aside>
 
-    <BasePage :loading="reportLoading" :error="null">
-      <!-- Controls -->
+    <!-- Main content -->
+    <main class="main-content">
+      <!-- Player picker -->
       <div class="controls">
-        <div class="control-group">
-          <label class="ctrl-label">Boss attempt</label>
-          <select v-model="selectedAttempt" class="ctrl-select">
-            <option
-              v-for="a in allAttempts"
-              :key="a.href"
-              :value="a"
-            >
-              {{ a.encounter_name }} — {{ a.difficulty }} —
-              {{ a.attempt_type === 'kill' ? 'Kill' : `Wipe ${a.attempt_from_last_kill}` }}
-              ({{ a.duration_str }})
-            </option>
-          </select>
-        </div>
-
         <div class="control-group">
           <label class="ctrl-label">Player</label>
           <select v-model="selectedPlayer" class="ctrl-select">
@@ -124,13 +137,19 @@ const ticks = computed<number[]>(() => {
             </option>
           </select>
         </div>
+        <div v-if="selectedAttempt" class="attempt-info">
+          {{ selectedAttempt.encounter_name }} —
+          {{ selectedAttempt.difficulty }} —
+          {{ selectedAttempt.attempt_type === 'kill' ? 'Kill' : `Wipe ${selectedAttempt.attempt_from_last_kill}` }}
+          ({{ selectedAttempt.duration_str }})
+        </div>
       </div>
 
       <BasePage :loading="timelineLoading" :error="error">
         <div v-if="data" class="timeline-wrap">
-          <!-- Ruler -->
-          <div class="ruler">
-            <div class="ruler-label-col" />
+          <!-- Ruler + death markers -->
+          <div class="ruler-row">
+            <div class="label-col" />
             <div class="ruler-track">
               <div
                 v-for="t in ticks"
@@ -140,6 +159,14 @@ const ticks = computed<number[]>(() => {
               >
                 <span class="tick-label">{{ fmtSeconds(t) }}</span>
               </div>
+              <!-- Death markers — red | at time of death -->
+              <div
+                v-for="(d, i) in deathMarkers"
+                :key="'d' + i"
+                class="death-mark"
+                :style="{ left: toPercent(d.ms) + '%' }"
+                :title="`${d.player} died at ${d.label}`"
+              />
             </div>
           </div>
 
@@ -149,7 +176,7 @@ const ticks = computed<number[]>(() => {
             :key="row.spell_id"
             class="spell-row"
           >
-            <div class="spell-label">
+            <div class="label-col spell-label">
               <img
                 v-if="row.spell.icon"
                 :src="`/static/icons/${row.spell.icon}.jpg`"
@@ -179,46 +206,29 @@ const ticks = computed<number[]>(() => {
           Select a player to load their timeline.
         </p>
       </BasePage>
-    </BasePage>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.timeline-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-.timeline-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.back-link {
+.report-title {
+  padding: 10px 12px 6px;
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.8125rem;
-  color: var(--link);
-  text-decoration: none;
-}
-.back-link:hover { color: var(--link-hover); }
-
-.timeline-title {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.125rem;
   font-weight: 600;
-  margin: 0;
-  letter-spacing: 0.04em;
+  font-size: 15px;
+  color: var(--text);
+  border-bottom: 1px solid var(--table-border);
 }
 
 /* ── Controls ──────────────────────────────────────────────── */
 .controls {
   display: flex;
+  align-items: center;
   gap: 1.5rem;
   flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--table-border);
 }
 
 .control-group {
@@ -243,37 +253,47 @@ const ticks = computed<number[]>(() => {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.875rem;
   padding: 4px 10px;
-  min-width: 280px;
+  min-width: 200px;
   cursor: pointer;
 }
 
 .ctrl-select:focus { outline: 1px solid var(--primary); }
+
+.attempt-info {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  align-self: flex-end;
+  padding-bottom: 4px;
+}
 
 /* ── Timeline ──────────────────────────────────────────────── */
 .timeline-wrap {
   overflow-x: auto;
 }
 
-.ruler,
+.label-col {
+  width: 180px;
+  min-width: 180px;
+  flex-shrink: 0;
+}
+
+.ruler-row,
 .spell-row {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  align-items: center;
+  display: flex;
+  align-items: stretch;
   min-width: 700px;
 }
 
-.ruler {
+.ruler-row {
   height: 24px;
   border-bottom: 1px solid var(--table-border);
   margin-bottom: 4px;
 }
 
-.ruler-label-col {
-  /* spacer matching .spell-label width */
-}
-
 .ruler-track {
   position: relative;
+  flex: 1;
   height: 100%;
 }
 
@@ -291,6 +311,24 @@ const ticks = computed<number[]>(() => {
   font-size: 0.625rem;
   color: var(--text-muted);
   line-height: 24px;
+}
+
+/* Death marker — thin red vertical line on the ruler */
+.death-mark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background: crimson;
+  opacity: 0.85;
+  transform: translateX(-50%);
+  cursor: default;
+  z-index: 1;
+}
+
+.death-mark:hover {
+  opacity: 1;
+  width: 2px;
 }
 
 .spell-row {
@@ -325,6 +363,7 @@ const ticks = computed<number[]>(() => {
 
 .spell-track {
   position: relative;
+  flex: 1;
   height: 100%;
   background: hsl(0, 0%, 3%);
 }

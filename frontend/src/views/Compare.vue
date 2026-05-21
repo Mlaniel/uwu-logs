@@ -4,9 +4,10 @@ import { useRoute } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
+import BossSelector from '../components/BossSelector.vue'
 import SpellTable from '../components/SpellTable.vue'
 import { CLASS_DISPLAY_NAMES } from '../constants/bosses'
-import type { SpellRow, SpellInfo } from '../types/api'
+import type { BossAttempt, SpellRow, SpellInfo } from '../types/api'
 
 interface ComparePlayer {
   NAME: string
@@ -26,34 +27,47 @@ interface CompareApiResponse {
 const route = useRoute()
 const reportId = computed(() => route.params.id as string)
 
-// Load the report so we can get available class names
 const { report, loading: reportLoading, fetchOverview } = useReport()
 watch(reportId, id => fetchOverview(id), { immediate: true })
+
+const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
+const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
 
 const availableClasses = computed<string[]>(() => {
   if (!report.value) return []
   return [...new Set(Object.values(report.value.PLAYER_CLASSES))].sort()
 })
 
+// Boss selection (drives compare query scope)
+const selectedHref = ref('')
+
+function selectBoss(attempt: BossAttempt): void {
+  selectedHref.value = attempt.href
+  runCompare()
+}
+
+function clearBoss(): void {
+  selectedHref.value = ''
+  runCompare()
+}
+
 const selectedClass = ref('')
 watch(availableClasses, classes => {
   if (classes.length && !selectedClass.value) selectedClass.value = classes[0]
 })
 
-// Compare fetch
 const { data, loading: compareLoading, error, execute } = useFetch<CompareApiResponse>()
 
 function runCompare(): void {
   if (!selectedClass.value) return
-  execute(`/api/v2/reports/${reportId.value}/compare/`, {
-    method: 'POST',
-    body: { class: selectedClass.value },
-  })
+  const url = selectedHref.value
+    ? `/api/v2/reports/${reportId.value}/compare/${selectedHref.value}`
+    : `/api/v2/reports/${reportId.value}/compare/`
+  execute(url, { method: 'POST', body: { class: selectedClass.value } })
 }
 
 watch(selectedClass, runCompare)
 
-// Assemble spell rows per player
 function playerSpellRows(player: ComparePlayer): SpellRow[] {
   const spells = player.SPELLS_DATA ?? data.value?.SPELLS ?? {}
   return Object.entries(spells)
@@ -72,21 +86,39 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
 </script>
 
 <template>
-  <div class="compare-page">
-    <header class="compare-header">
-      <router-link :to="`/reports/${reportId}`" class="back-link">← Back</router-link>
-      <h1 class="compare-title">Compare</h1>
-    </header>
-
-    <main class="compare-main">
+  <div class="page-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="report-title">{{ reportTitle }}</div>
       <BasePage :loading="reportLoading" :error="null">
-        <div class="class-picker">
-          <label class="picker-label">Class</label>
-          <select v-model="selectedClass" class="class-select">
-            <option v-for="cls in availableClasses" :key="cls" :value="cls">
-              {{ CLASS_DISPLAY_NAMES[cls] ?? cls }}
-            </option>
-          </select>
+        <BossSelector
+          :bosses="bosses"
+          :selected-href="selectedHref"
+          @select="selectBoss"
+          @deselect="clearBoss"
+        />
+      </BasePage>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+      <BasePage :loading="reportLoading" :error="null">
+        <!-- Class picker -->
+        <div class="controls">
+          <div class="control-group">
+            <label class="ctrl-label">Class</label>
+            <div class="class-buttons">
+              <button
+                v-for="cls in availableClasses"
+                :key="cls"
+                class="class-btn"
+                :class="{ active: selectedClass === cls }"
+                @click="selectedClass = cls"
+              >
+                {{ CLASS_DISPLAY_NAMES[cls] ?? cls }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <BasePage :loading="compareLoading" :error="error">
@@ -108,69 +140,67 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
 </template>
 
 <style scoped>
-.compare-page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 1rem;
+.report-title {
+  padding: 10px 12px 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  border-bottom: 1px solid var(--table-border);
 }
 
-.compare-header {
+/* ── Controls ──────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--table-border);
+}
+
+.control-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 6px;
 }
 
-.back-link {
+.ctrl-label {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.8125rem;
-  color: var(--link);
-  text-decoration: none;
-  letter-spacing: 0.04em;
-}
-
-.back-link:hover {
-  color: var(--link-hover);
-}
-
-.compare-title {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin: 0;
-  letter-spacing: 0.04em;
-}
-
-.class-picker {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 1.5rem;
-}
-
-.picker-label {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.class-select {
+.class-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.class-btn {
   background: var(--surface);
   border: 1px solid var(--table-border);
-  color: var(--text);
+  color: var(--text-muted);
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.875rem;
-  padding: 4px 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
   cursor: pointer;
 }
 
-.class-select:focus {
-  outline: 1px solid var(--primary);
+.class-btn:hover { color: var(--text); }
+.class-btn.active {
+  border-color: var(--primary);
+  color: var(--text);
+  background: hsl(271, 76%, 10%);
 }
 
+/* ── Players ────────────────────────────────────────────────── */
 .players-compare {
   display: flex;
   flex-direction: column;

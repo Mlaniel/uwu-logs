@@ -34,6 +34,8 @@ function assemblePlayer(
     heal: normalizeStatCell(response.DATA.heal?.[name]),
     heal_total: normalizeStatCell(response.DATA.heal_total?.[name]),
     taken: normalizeStatCell(response.DATA.taken?.[name]),
+    active_pct: response.ACTIVE_PCT?.[name] ?? 0,
+    casts: response.SPELL_COUNTS?.[name] ?? 0,
   }
 }
 

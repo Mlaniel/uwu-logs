@@ -52,6 +52,8 @@ export interface ReportApiResponse {
   }
   // Python tuple → JSON array: ["Frost Death Knight", "spell_deathknight_frostpresence"]
   SPECS: Record<string, [string, string]>
+  ACTIVE_PCT:   Record<string, number>    // player_name → active% (0-100)
+  SPELL_COUNTS: Record<string, number>    // player_name → total spell casts
 }
 
 // Assembled player row — built by useReport from the raw response.
@@ -66,6 +68,8 @@ export interface Player {
   heal: StatCell
   heal_total: StatCell
   taken: StatCell
+  active_pct: number              // % of fight seconds with activity (0-100)
+  casts: number                   // total SPELL_CAST_SUCCESS events
 }
 
 export interface RecentReport {
@@ -161,6 +165,21 @@ export interface AllGraphData {
   damage: DamageGraphData | null
   heal: DamageGraphData | null
   taken: DamageGraphData | null
+}
+
+// One kill segment from GET /api/v2/reports/:id/raid_graph/
+// damage/heal/taken: per-second summed values (not cumulative) across all players.
+export interface RaidKill {
+  name: string
+  labels: string[]
+  damage: number[]
+  heal: number[]
+  taken: number[]
+}
+
+// Response from GET /api/v2/reports/:id/raid_graph/
+export interface RaidGraphData {
+  kills: RaidKill[]
 }
 
 // Response from GET /api/v2/reports/:id/deaths/

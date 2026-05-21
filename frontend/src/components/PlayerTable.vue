@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RecycleScroller } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { Player } from '../types/api'
 import type { SortKey } from '../composables/useFilters'
 import { POINTS } from '../constants/bosses'
@@ -93,109 +91,118 @@ const maxDtps = computed(() =>
       <div class="col-rate-hdr sortable" @click="emit('sort', 'dtps')">
         DTPS{{ sortIndicator('dtps') }}
       </div>
+      <div class="col-sm-hdr sortable" @click="emit('sort', 'active_pct')">
+        Active%{{ sortIndicator('active_pct') }}
+      </div>
+      <div class="col-sm-hdr sortable" @click="emit('sort', 'casts')">
+        Casts{{ sortIndicator('casts') }}
+      </div>
     </div>
 
-    <!-- Virtualized player rows -->
-    <RecycleScroller
-      class="scroller"
-      :items="players"
-      :item-size="30"
-      key-field="name"
+    <!-- Player rows -->
+    <div
+      v-for="player in players"
+      :key="player.name"
+      class="player-row"
+      :class="{ healer: player.useful === null }"
+      @click="emit('player-click', player.name)"
     >
-      <template #default="{ item: player }">
-        <div
-          class="player-row"
-          :class="{ healer: player.useful === null }"
-          @click="emit('player-click', player.name)"
-        >
-          <!-- Name + spec icon -->
-          <div class="col-name">
-            <img
-              class="spec-icon"
-              :src="`/static/icons/${player.spec_icon}.jpg`"
-              :alt="player.spec_name"
-              width="16"
-              height="16"
-            />
-            <span :class="classSlug(player.class_name)">{{ player.name }}</span>
-          </div>
+      <!-- Name + spec icon -->
+      <div class="col-name">
+        <img
+          class="spec-icon"
+          :src="`/static/icons/${player.spec_icon}.jpg`"
+          :alt="player.spec_name"
+          width="16"
+          height="16"
+        />
+        <span :class="classSlug(player.class_name)">{{ player.name }}</span>
+      </div>
 
-          <!-- Damage -->
-          <div
-            class="bar-cell col-stat"
-            :style="{
-              '--pct': (player.useful?.percent ?? 0) + '%',
-              '--bar': rankBarColor(player.useful?.percent ?? 0),
-            }"
-          >
-            <div class="bar" />
-            <span :class="rankClass(player.useful?.percent ?? 0)">
-              {{ player.useful?.value || player.damage.value || '—' }}
-            </span>
-          </div>
+      <!-- Damage -->
+      <div
+        class="bar-cell col-stat"
+        :style="{
+          '--pct': (player.useful?.percent ?? 0) + '%',
+          '--bar': rankBarColor(player.useful?.percent ?? 0),
+        }"
+      >
+        <div class="bar" />
+        <span :class="rankClass(player.useful?.percent ?? 0)">
+          {{ player.useful?.value || player.damage.value || '—' }}
+        </span>
+      </div>
 
-          <!-- DPS -->
-          <div
-            class="bar-cell col-rate"
-            :style="{
-              '--pct': ((player.useful?.per_second ?? player.damage.per_second) / maxDps) * 100 + '%',
-              '--bar': NEUTRAL,
-            }"
-          >
-            <div class="bar" />
-            <span>{{ fmtRate(player.useful?.per_second ?? player.damage.per_second) }}</span>
-          </div>
+      <!-- DPS -->
+      <div
+        class="bar-cell col-rate"
+        :style="{
+          '--pct': ((player.useful?.per_second ?? player.damage.per_second) / maxDps) * 100 + '%',
+          '--bar': NEUTRAL,
+        }"
+      >
+        <div class="bar" />
+        <span>{{ fmtRate(player.useful?.per_second ?? player.damage.per_second) }}</span>
+      </div>
 
-          <!-- Heal -->
-          <div
-            class="bar-cell col-stat"
-            :style="{
-              '--pct': player.heal.percent + '%',
-              '--bar': rankBarColor(player.heal.percent),
-            }"
-          >
-            <div class="bar" />
-            <span :class="rankClass(player.heal.percent)">{{ player.heal.value || '—' }}</span>
-          </div>
+      <!-- Heal -->
+      <div
+        class="bar-cell col-stat"
+        :style="{
+          '--pct': player.heal.percent + '%',
+          '--bar': rankBarColor(player.heal.percent),
+        }"
+      >
+        <div class="bar" />
+        <span :class="rankClass(player.heal.percent)">{{ player.heal.value || '—' }}</span>
+      </div>
 
-          <!-- HPS -->
-          <div
-            class="bar-cell col-rate"
-            :style="{
-              '--pct': (player.heal.per_second / maxHps) * 100 + '%',
-              '--bar': NEUTRAL,
-            }"
-          >
-            <div class="bar" />
-            <span>{{ fmtRate(player.heal.per_second) }}</span>
-          </div>
+      <!-- HPS -->
+      <div
+        class="bar-cell col-rate"
+        :style="{
+          '--pct': (player.heal.per_second / maxHps) * 100 + '%',
+          '--bar': NEUTRAL,
+        }"
+      >
+        <div class="bar" />
+        <span>{{ fmtRate(player.heal.per_second) }}</span>
+      </div>
 
-          <!-- Taken -->
-          <div
-            class="bar-cell col-stat"
-            :style="{
-              '--pct': player.taken.percent + '%',
-              '--bar': rankBarColor(player.taken.percent),
-            }"
-          >
-            <div class="bar" />
-            <span :class="rankClass(player.taken.percent)">{{ player.taken.value || '—' }}</span>
-          </div>
+      <!-- Taken -->
+      <div
+        class="bar-cell col-stat"
+        :style="{
+          '--pct': player.taken.percent + '%',
+          '--bar': rankBarColor(player.taken.percent),
+        }"
+      >
+        <div class="bar" />
+        <span :class="rankClass(player.taken.percent)">{{ player.taken.value || '—' }}</span>
+      </div>
 
-          <!-- DTPS -->
-          <div
-            class="bar-cell col-rate"
-            :style="{
-              '--pct': (player.taken.per_second / maxDtps) * 100 + '%',
-              '--bar': NEUTRAL,
-            }"
-          >
-            <div class="bar" />
-            <span>{{ fmtRate(player.taken.per_second) }}</span>
-          </div>
-        </div>
-      </template>
-    </RecycleScroller>
+      <!-- DTPS -->
+      <div
+        class="bar-cell col-rate"
+        :style="{
+          '--pct': (player.taken.per_second / maxDtps) * 100 + '%',
+          '--bar': NEUTRAL,
+        }"
+      >
+        <div class="bar" />
+        <span>{{ fmtRate(player.taken.per_second) }}</span>
+      </div>
+
+      <!-- Active% -->
+      <div class="plain-cell col-sm">
+        <span>{{ player.active_pct ? player.active_pct.toFixed(1) + '%' : '—' }}</span>
+      </div>
+
+      <!-- Casts -->
+      <div class="plain-cell col-sm">
+        <span>{{ player.casts || '—' }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -230,25 +237,34 @@ const maxDtps = computed(() =>
 .col-name-hdr:hover { color: var(--text); }
 
 .col-stat-hdr {
-  width: 95px;
+  width: 90px;
   flex-shrink: 0;
   text-align: right;
   padding: 0 8px;
 }
 
 .col-rate-hdr {
-  width: 80px;
+  width: 72px;
+  flex-shrink: 0;
+  text-align: right;
+  padding: 0 8px;
+}
+
+.col-sm-hdr {
+  width: 64px;
   flex-shrink: 0;
   text-align: right;
   padding: 0 8px;
 }
 
 .col-stat-hdr.sortable,
-.col-rate-hdr.sortable {
+.col-rate-hdr.sortable,
+.col-sm-hdr.sortable {
   cursor: pointer;
 }
 .col-stat-hdr.sortable:hover,
-.col-rate-hdr.sortable:hover {
+.col-rate-hdr.sortable:hover,
+.col-sm-hdr.sortable:hover {
   color: var(--text);
 }
 
@@ -301,8 +317,8 @@ const maxDtps = computed(() =>
   overflow: hidden;
 }
 
-.col-stat { width: 95px; }
-.col-rate { width: 80px; }
+.col-stat { width: 90px; }
+.col-rate { width: 72px; }
 
 .bar {
   position: absolute;
@@ -320,10 +336,22 @@ const maxDtps = computed(() =>
   line-height: 1;
 }
 
-/* ── Scroller ────────────────────────────────────────────────────────────── */
+/* ── Plain cells (no bar) ────────────────────────────────────────────────── */
 
-.scroller {
-  height: calc(100vh - 380px);
-  min-height: 200px;
+.plain-cell {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+}
+
+.col-sm { width: 64px; }
+
+.plain-cell span {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 </style>

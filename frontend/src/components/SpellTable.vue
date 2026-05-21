@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { RecycleScroller } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { SpellRow } from '../types/api'
 
 defineProps<{
@@ -19,37 +17,32 @@ defineProps<{
       <div class="col-bar" />
     </div>
 
-    <RecycleScroller
-      class="spell-scroller"
-      :items="spells"
-      :item-size="36"
-      key-field="spell_id"
+    <div
+      v-for="item in spells"
+      :key="item.spell_id"
+      class="spell-row"
     >
-      <template #default="{ item }">
-        <div class="spell-row">
-          <div class="col-icon">
-            <img
-              v-if="item.icon"
-              :src="`/static/icons/${item.icon}.jpg`"
-              :alt="item.name"
-              class="spell-icon"
-            />
-          </div>
-          <div class="col-name" :style="{ color: item.color || undefined }">
-            {{ item.name }}
-          </div>
-          <div class="col-casts number">{{ item.casts }}</div>
-          <div class="col-pct number">{{ item.percent }}%</div>
-          <div class="col-amount number">{{ item.actual }}</div>
-          <div class="col-bar">
-            <div
-              class="bar-fill"
-              :style="{ width: item.percent + '%' }"
-            />
-          </div>
-        </div>
-      </template>
-    </RecycleScroller>
+      <div class="col-icon">
+        <img
+          v-if="item.icon"
+          :src="`/static/icons/${item.icon}.jpg`"
+          :alt="item.name"
+          class="spell-icon"
+        />
+      </div>
+      <div class="col-name" :style="{ color: item.color || undefined }">
+        {{ item.name }}
+      </div>
+      <div class="col-casts number">{{ item.casts }}</div>
+      <div class="col-pct number">{{ item.percent }}%</div>
+      <div class="col-amount number">{{ item.actual }}</div>
+      <div class="col-bar">
+        <div
+          class="bar-fill"
+          :style="{ width: item.percent + '%' }"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -57,7 +50,6 @@ defineProps<{
 .spell-table-wrap {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .spell-thead,
@@ -87,10 +79,6 @@ defineProps<{
 
 .spell-row:hover {
   background: var(--hover-row);
-}
-
-.spell-scroller {
-  height: 500px;
 }
 
 .spell-icon {

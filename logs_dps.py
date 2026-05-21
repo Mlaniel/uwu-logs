@@ -301,6 +301,59 @@ class Dps(logs_base.THE_LOGS):
         return result
 
     @logs_base.cache_wrap
+    def get_spell_casts_per_player(self, s: int, f: int) -> dict[str, int]:
+        """Scan SPELL_CAST_SUCCESS events → {player_name: cast_count} (player only, not pets)."""
+        logs_slice = self.LOGS[s:f]
+        if not logs_slice:
+            return {}
+
+        guid_to_player: dict[str, str] = {}
+        for player_name in self.CLASSES_NAMES:
+            guid = self.name_to_guid(player_name)
+            if guid:
+                guid_to_player[guid] = player_name
+
+        counts: dict[str, int] = {}
+        for line in logs_slice:
+            if 'SPELL_CAST_SUCCESS' not in line:
+                continue
+            parts = line.split(',', 3)
+            if len(parts) < 3 or parts[1] != 'SPELL_CAST_SUCCESS':
+                continue
+            player = guid_to_player.get(parts[2])
+            if player is not None:
+                counts[player] = counts.get(player, 0) + 1
+
+        return counts
+
+    def get_active_seconds_per_player(self, s: int, f: int) -> tuple[dict[str, int], int]:
+        """Returns ({player: active_secs}, fight_duration_secs). Reuses cached raw data."""
+        logs_slice = self.LOGS[s:f]
+        if not logs_slice:
+            return {}, 0
+
+        first = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        last  = to_int(logs_slice[-1].split(",", 1)[0][-9:-2])
+        diff  = last - first
+        if diff < 0:
+            diff += 36000
+        duration_secs = max(1, diff // 10)
+
+        dmg_raw  = self.get_all_players_raw(s, f)
+        heal_raw = self.get_all_players_raw_heal(s, f)
+
+        result: dict[str, int] = {}
+        for player in set(dmg_raw) | set(heal_raw):
+            active_tenths: set[int] = set()
+            if player in dmg_raw:
+                active_tenths.update(dmg_raw[player].keys())
+            if player in heal_raw:
+                active_tenths.update(heal_raw[player].keys())
+            result[player] = len({t // 10 for t in active_tenths})
+
+        return result, duration_secs
+
+    @logs_base.cache_wrap
     def get_dps(self, s, f, player: str):
         logs_slice = self.LOGS[s:f]
         all_guids = self.get_players_and_pets_guids()
