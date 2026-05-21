@@ -223,7 +223,7 @@ const dps = computed(() =>
   display: flex;
   align-items: center;
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 13px;
+  font-size: 17px;
   color: var(--text);
 }
 .bull { color: var(--text-muted); margin: 0 8px; }
@@ -241,18 +241,18 @@ const dps = computed(() =>
 
 .boss-section {
   flex: 0 0 auto;
-  width: 230px;
+  width: 300px;
 }
 
 .col-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 15px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 3px;
-  padding-bottom: 3px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--table-border);
 }
 .wipes-title { margin-top: 8px; }
@@ -260,14 +260,14 @@ const dps = computed(() =>
 .boss-row {
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 24px;
+  gap: 6px;
+  height: 32px;
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 13px;
+  font-size: 17px;
 }
 
-.kill-dot { color: var(--kill); font-size: 9px; flex-shrink: 0; }
-.wipe-dot { color: var(--wipe); font-size: 10px; flex-shrink: 0; }
+.kill-dot { color: var(--kill); font-size: 12px; flex-shrink: 0; }
+.wipe-dot { color: var(--wipe); font-size: 13px; flex-shrink: 0; }
 
 .boss-name {
   flex: 1;
@@ -278,8 +278,8 @@ const dps = computed(() =>
 }
 
 .boss-dur { font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.wipe-badge { font-size: 10px; color: var(--wipe); flex-shrink: 0; }
-.empty { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; padding: 4px 0; }
+.wipe-badge { font-size: 13px; color: var(--wipe); flex-shrink: 0; }
+.empty { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; padding: 4px 0; }
 
 /* ── Roster section ──────────────────────────────────────────────────────── */
 
@@ -304,8 +304,8 @@ const dps = computed(() =>
 .player-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 24px;
+  gap: 8px;
+  height: 32px;
 }
 
 .spec-icon {
@@ -315,7 +315,7 @@ const dps = computed(() =>
 }
 
 .pname {
-  font-size: 13px;
+  font-size: 17px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -325,7 +325,7 @@ const dps = computed(() =>
 
 .spec-label {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
+  font-size: 15px;
   flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -334,7 +334,7 @@ const dps = computed(() =>
 
 .pstat {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   white-space: nowrap;
