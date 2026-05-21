@@ -182,6 +182,7 @@ interface TooltipState {
   spellName: string
   target: string
   amount: string
+  result: string   // 'Hit' | 'Crit' | 'Miss' | 'Dodge' | 'Resist' | …
   time: string
 }
 
@@ -214,6 +215,23 @@ function parsedAmount(ev: CastEvent): string {
   return n
 }
 
+// Determine hit result from the event flag and etc field.
+// SPELL_DAMAGE etc: spellSchool,amount,overkill,school,resisted,blocked,absorbed,critical,...
+// SPELL_MISSED etc: spellSchool,missType,...
+function hitResult(ev: CastEvent): string {
+  const flag = ev[1]
+  const parts = String(ev[5] ?? '').split(',')
+  if (flag.includes('MISS')) {
+    const raw = parts[1] ?? ''
+    if (!raw) return 'Miss'
+    return raw.charAt(0) + raw.slice(1).toLowerCase()   // "RESIST" → "Resist"
+  }
+  if (flag.includes('DAMAGE') || flag.includes('HEAL')) {
+    return parts[7] === '1' ? 'Crit' : 'Hit'
+  }
+  return ''
+}
+
 function fmtDeltaMs(ms: number): string {
   const sign = ms < 0 ? '-' : ''
   const abs  = Math.abs(ms)
@@ -229,6 +247,7 @@ function onCastEnter(ev: CastEvent, spellName: string, e: MouseEvent): void {
     spellName,
     target: ev[3] || '—',
     amount: parsedAmount(ev),
+    result: hitResult(ev),
     time:   fmtDeltaMs(ev[0]),
   }
 }
@@ -492,6 +511,10 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
           <div class="tt-row">
             <span class="tt-label">Target</span>
             <span>{{ tooltip.target }}</span>
+          </div>
+          <div v-if="tooltip.result" class="tt-row">
+            <span class="tt-label">Result</span>
+            <span :class="tooltip.result === 'Crit' ? 'tt-crit' : tooltip.result === 'Hit' ? '' : 'tt-miss'">{{ tooltip.result }}</span>
           </div>
           <div v-if="tooltip.amount" class="tt-row">
             <span class="tt-label">Amount</span>
@@ -821,5 +844,7 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
 
 .tt-heal { color: var(--kill, #48bb78); font-variant-numeric: tabular-nums; }
 .tt-dmg  { color: #ef5454;              font-variant-numeric: tabular-nums; }
+.tt-crit { color: #ffd700; font-weight: 600; }
+.tt-miss { color: var(--text-muted); }
 .tt-time { font-variant-numeric: tabular-nums; }
 </style>
