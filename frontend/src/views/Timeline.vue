@@ -188,6 +188,22 @@ function onCastLeave(): void {
   tooltip.value = null
 }
 
+// Pair each SPELL_CAST_START with the next event that has damage/heal amount.
+// Returns { startMs, endMs } bars representing cast duration.
+function castBars(events: CastEvent[]): Array<{ startMs: number; endMs: number }> {
+  const bars: Array<{ startMs: number; endMs: number }> = []
+  let pendingMs: number | null = null
+  for (const ev of events) {
+    if (ev[1] === 'SPELL_CAST_START') {
+      pendingMs = ev[0]
+    } else if (pendingMs !== null && parsedAmount(ev) !== '') {
+      if (ev[0] > pendingMs) bars.push({ startMs: pendingMs, endMs: ev[0] })
+      pendingMs = null
+    }
+  }
+  return bars
+}
+
 function onCastMove(e: MouseEvent): void {
   if (tooltip.value) {
     tooltip.value.x = e.clientX
@@ -323,6 +339,17 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
                 v-if="startOffset > 0"
                 class="zero-mark"
                 :style="{ left: toPercent(0) + '%' }"
+              />
+              <!-- Cast-time bars: translucent fill from CAST_START → damage landing -->
+              <div
+                v-for="(bar, bi) in castBars(row.events)"
+                :key="'bar' + bi"
+                class="cast-bar"
+                :style="{
+                  left:  toPercent(bar.startMs) + '%',
+                  width: Math.max(0, toPercent(bar.endMs) - toPercent(bar.startMs)) + '%',
+                  background: row.spell.color || 'var(--primary-dim)',
+                }"
               />
               <div
                 v-for="(ev, i) in row.events"
@@ -581,6 +608,15 @@ const selectedHref = computed(() => selectedAttempt.value?.href ?? '')
   width: 4px;
   height: 16px;
   cursor: default;
+}
+
+.cast-bar {
+  position: absolute;
+  top: 15%;
+  height: 70%;
+  opacity: 0.22;
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 .cast-dmg  { background: var(--primary-dim); }
