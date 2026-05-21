@@ -18,7 +18,7 @@ def get_raw_data(logs: list[str], guids: set[str]):
             continue
         if _line[1] not in FLAGS:
             continue
-        data[_line[0][-9:-2]] += int(_line[9])
+        data[_line[0][-12:-2]] += int(_line[9])
 
     return data
 
@@ -39,13 +39,15 @@ def get_raw_data(logs: list[str], source_guids: set[str], filter_guids: set[str]
             continue
         if flag not in FLAGS:
             continue
-        data[timestamp[-9:-2]] += int(damage)
+        data[timestamp[-12:-2]] += int(damage)
 
     return data
 
 def to_int(s: str):
-    minutes, seconds = s.split(":", 1)
-    return int(minutes) * 600 + int(seconds.replace('.', ''))
+    parts = s.split(":", 2)
+    if len(parts) == 3:
+        return int(parts[0]) * 36000 + int(parts[1]) * 600 + int(parts[2].replace('.', ''))
+    return int(parts[0]) * 600 + int(parts[1].replace('.', ''))
 
 def convert_to_continuous_dps_seconds(data: dict[str, int]):
     DPS = {}
@@ -119,12 +121,12 @@ def convert_keys(data: dict[str, int], pull_start_line: str):
     if not data:
         return
     
-    _timestamp = pull_start_line.split(",", 1)[0][-9:-2]
+    _timestamp = pull_start_line.split(",", 1)[0][-12:-2]
     FIRST_KEY = to_int(_timestamp)
     for k in list(data):
         new_key = to_int(k) - FIRST_KEY
         if new_key < 0:
-            new_key = new_key + 36000
+            new_key = new_key + 864000
         data[new_key] = data.pop(k)
 
 def convert_keys_to_str(data: dict[int, int]):
@@ -157,7 +159,7 @@ def get_raw_data_all_players(
         player_name = guid_to_player[sGUID]
         if player_name not in per_player:
             per_player[player_name] = defaultdict(int)
-        per_player[player_name][timestamp[-9:-2]] += int(damage)
+        per_player[player_name][timestamp[-12:-2]] += int(damage)
     return per_player
 
 
@@ -184,7 +186,7 @@ def get_raw_data_all_players_heal(
         player_name = guid_to_player[sGUID]
         if player_name not in per_player:
             per_player[player_name] = defaultdict(int)
-        per_player[player_name][timestamp[-9:-2]] += effective
+        per_player[player_name][timestamp[-12:-2]] += effective
     return per_player
 
 
@@ -194,9 +196,14 @@ def get_raw_data_all_players_taken(
     player_pet_guids: set[str],
 ) -> dict[str, dict[str, int]]:
     """Single log scan → {player_name: {timestamp_str: damage_taken}} for all players."""
+    # Spell IDs for scripted mechanics that deal unavoidable mass damage and skew the graph.
+    TAKEN_IGNORE_SPELLS = {",72350,"}  # Fury of Frostmourne (Lich King)
+
     per_player: dict[str, defaultdict] = {}
     for line in logs:
         if "DAMAGE" not in line:
+            continue
+        if any(s in line for s in TAKEN_IGNORE_SPELLS):
             continue
         try:
             timestamp, flag, _, _, tGUID, _, _, _, _, damage, _, _ = line.split(',', 11)
@@ -211,7 +218,7 @@ def get_raw_data_all_players_taken(
             continue
         if player_name not in per_player:
             per_player[player_name] = defaultdict(int)
-        per_player[player_name][timestamp[-9:-2]] += int(damage)
+        per_player[player_name][timestamp[-12:-2]] += int(damage)
     return per_player
 
 
@@ -234,14 +241,14 @@ class Dps(logs_base.THE_LOGS):
         raw_by_ts = get_raw_data_all_players(logs_slice, guid_to_player, all_guids)
 
         # Convert timestamp strings to integer offsets from the fight start
-        first_key = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        first_key = to_int(logs_slice[0].split(",", 1)[0][-12:-2])
         result: dict[str, dict[int, int]] = {}
         for player_name, ts_map in raw_by_ts.items():
             converted: dict[int, int] = {}
             for ts_str, dmg in ts_map.items():
                 offset = to_int(ts_str) - first_key
                 if offset < 0:
-                    offset += 36000
+                    offset += 864000
                 converted[offset] = converted.get(offset, 0) + dmg
             result[player_name] = converted
         return result
@@ -260,14 +267,14 @@ class Dps(logs_base.THE_LOGS):
 
         raw_by_ts = get_raw_data_all_players_heal(logs_slice, guid_to_player)
 
-        first_key = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        first_key = to_int(logs_slice[0].split(",", 1)[0][-12:-2])
         result: dict[str, dict[int, int]] = {}
         for player_name, ts_map in raw_by_ts.items():
             converted: dict[int, int] = {}
             for ts_str, amount in ts_map.items():
                 offset = to_int(ts_str) - first_key
                 if offset < 0:
-                    offset += 36000
+                    offset += 864000
                 converted[offset] = converted.get(offset, 0) + amount
             result[player_name] = converted
         return result
@@ -288,14 +295,14 @@ class Dps(logs_base.THE_LOGS):
 
         raw_by_ts = get_raw_data_all_players_taken(logs_slice, guid_to_player, all_guids)
 
-        first_key = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
+        first_key = to_int(logs_slice[0].split(",", 1)[0][-12:-2])
         result: dict[str, dict[int, int]] = {}
         for player_name, ts_map in raw_by_ts.items():
             converted: dict[int, int] = {}
             for ts_str, amount in ts_map.items():
                 offset = to_int(ts_str) - first_key
                 if offset < 0:
-                    offset += 36000
+                    offset += 864000
                 converted[offset] = converted.get(offset, 0) + amount
             result[player_name] = converted
         return result
@@ -332,11 +339,11 @@ class Dps(logs_base.THE_LOGS):
         if not logs_slice:
             return {}, 0
 
-        first = to_int(logs_slice[0].split(",", 1)[0][-9:-2])
-        last  = to_int(logs_slice[-1].split(",", 1)[0][-9:-2])
+        first = to_int(logs_slice[0].split(",", 1)[0][-12:-2])
+        last  = to_int(logs_slice[-1].split(",", 1)[0][-12:-2])
         diff  = last - first
         if diff < 0:
-            diff += 36000
+            diff += 864000
         duration_secs = max(1, diff // 10)
 
         dmg_raw  = self.get_all_players_raw(s, f)

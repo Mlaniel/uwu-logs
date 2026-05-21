@@ -420,13 +420,13 @@ def raid_graph(report_id: str):
     labels = [f"{m}:{sv:02d}" for sec in range(n_secs) for m, sv in [divmod(sec, 60)]]
 
     # Convert boss segment timestamps → second offsets from raid start
-    first_ts = _to_int(report.LOGS[raid_s].split(",", 1)[0][-9:-2])
+    first_ts = _to_int(report.LOGS[raid_s].split(",", 1)[0][-12:-2])
 
     def _ts_offset(log_idx: int) -> int:
-        ts = _to_int(report.LOGS[log_idx].split(",", 1)[0][-9:-2])
+        ts = _to_int(report.LOGS[log_idx].split(",", 1)[0][-12:-2])
         diff = ts - first_ts
         if diff < 0:
-            diff += 36000   # midnight rollover
+            diff += 864000   # midnight rollover
         return diff // 10
 
     boss_regions = []
