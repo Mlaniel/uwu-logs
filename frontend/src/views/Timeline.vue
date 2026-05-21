@@ -56,12 +56,6 @@ function runFetch(): void {
 
 watch([selectedAttempt, selectedPlayer], runFetch)
 
-// After Vue renders new spell rows, tell the WoWhead widget to scan for new links.
-watch(displayRows, async () => {
-  await nextTick()
-  ;(window as any).$WowheadPower?.refreshLinks?.()
-})
-
 // ── Timeline rendering ────────────────────────────────────────────────────────
 const duration = computed(() => data.value?.RDURATION ?? 0)
 
@@ -74,6 +68,12 @@ const displayRows = computed(() => {
   return rows.value
     .map(r => ({ ...r, events: r.events.filter(ev => ev[2] === self) }))
     .filter(r => r.events.length > 0)
+})
+
+// After Vue renders new spell rows, tell the WoWhead widget to scan for new links.
+watch(displayRows, async () => {
+  await nextTick()
+  ;(window as any).$WowheadPower?.refreshLinks?.()
 })
 
 // How many seconds before 0:00 to show (0–60). Adjustable via slider.
