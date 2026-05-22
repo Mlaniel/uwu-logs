@@ -173,7 +173,9 @@ interface ReviveMark {
 
 function resolveGuid(raw: string | number): string {
   const s = String(raw ?? '')
-  return deathData.value?.GUIDS[s] ?? s
+  const v = deathData.value?.GUIDS[s]
+  if (v == null) return s
+  return (typeof v === 'object' ? v.name : v) ?? s
 }
 
 function resolveSpell(raw: string | number): string {
@@ -299,13 +301,23 @@ function makeMarkerPlugin() {
         const x   = xScale.getPixelForValue(idx)
         if (x < chartArea.left - 6 || x > chartArea.right + 6) continue
 
-        // Green upward triangle at bottom
-        const by = chartArea.bottom - 4
+        // Dashed green vertical line
+        ctx.strokeStyle = 'rgba(72,187,120,0.5)'
+        ctx.lineWidth   = 1
+        ctx.setLineDash([2, 4])
+        ctx.beginPath()
+        ctx.moveTo(x, chartArea.top)
+        ctx.lineTo(x, chartArea.bottom)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // Green upward triangle at top
+        const ty = chartArea.top + 7
         ctx.fillStyle = 'rgba(72,187,120,0.92)'
         ctx.beginPath()
-        ctx.moveTo(x,     by - 11)
-        ctx.lineTo(x - 5, by)
-        ctx.lineTo(x + 5, by)
+        ctx.moveTo(x,     ty + 9)
+        ctx.lineTo(x - 5, ty)
+        ctx.lineTo(x + 5, ty)
         ctx.closePath()
         ctx.fill()
 

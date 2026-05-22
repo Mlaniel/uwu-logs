@@ -257,6 +257,6 @@ export interface DeathApiResponse {
   DEATHS: Record<string, DeathEntry>    // key: "seconds-playername"
   CLASSES: Record<string, string>       // guid → class_name
   PLAYERS: Record<string, string>       // name → guid
-  GUIDS: Record<string, string>         // guid → name
+  GUIDS: Record<string, { name: string } | string>  // guid → {name, ...} or name
   SPELLS: Record<string, SpellInfo>
 }
