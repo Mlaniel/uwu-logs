@@ -183,33 +183,34 @@ function resolveSpell(raw: string | number): string {
 
 const deathMarks = computed<DeathMark[]>(() => {
   if (!deathData.value || !isLineMode.value) return []
-  return Object.entries(deathData.value.DEATHS)
-    .filter(([, entry]) => {
-      const first = entry.death[0]
-      return first && String(first[1]) !== 'RESURRECT'
-    })
-    .map(([key, entry]) => {
-      const sec  = Math.round(parseFloat(key))
-      const guid = deathData.value!.PLAYERS[entry.player]
-      const cls  = guid ? (deathData.value!.CLASSES[guid] ?? '') : ''
-      const kb   = entry.death[1]
-      let cause = '', amount = ''
-      if (kb && String(kb[1]) === 'DAMAGE') {
-        const src   = resolveGuid(kb[3] ?? '')
-        const spell = resolveSpell(kb[5] ?? '')
-        cause = (src && src !== entry.player) ? `${src} — ${spell}` : spell
-        const v = kb[6]
-        if (v != null && v !== '' && v !== 0)
-          amount = Number(v).toLocaleString('en-US')
-      }
-      return {
-        sec,
-        player:    entry.player,
-        classSlug: cls.toLowerCase().replace(/\s+/g, '-'),
-        cause,
-        amount,
-      }
-    })
+  return Object.entries(deathData.value.DEATHS).flatMap(([key, entry]) => {
+    const first = entry.death[0]
+    if (!first) return []
+    const sec  = Math.round(parseFloat(key))
+    const guid = deathData.value!.PLAYERS[entry.player]
+    const cls  = guid ? (deathData.value!.CLASSES[guid] ?? '') : ''
+    const isRez = String(first[1]) === 'RESURRECT'
+    // For rez entries: death[0]=rez, death[1]=UNIT_DIED, death[2]=killing blow
+    // For regular deaths: death[0]=UNIT_DIED, death[1]=killing blow
+    if (isRez && entry.death.length < 2) return []
+    const kb = isRez ? entry.death[2] : entry.death[1]
+    let cause = '', amount = ''
+    if (kb && String(kb[1]) === 'DAMAGE') {
+      const src   = resolveGuid(kb[3] ?? '')
+      const spell = resolveSpell(kb[5] ?? '')
+      cause = (src && src !== entry.player) ? `${src} — ${spell}` : spell
+      const v = kb[6]
+      if (v != null && v !== '' && v !== 0)
+        amount = Number(v).toLocaleString('en-US')
+    }
+    return [{
+      sec,
+      player:    entry.player,
+      classSlug: cls.toLowerCase().replace(/\s+/g, '-'),
+      cause,
+      amount,
+    }]
+  })
 })
 
 const reviveMarks = computed<ReviveMark[]>(() => {
