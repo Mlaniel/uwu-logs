@@ -258,11 +258,10 @@ function buildStackedDatasets() {
 
   const filteredNames = new Set(props.players.map(p => p.name))
 
-  // Lowest range-damage first → bottom of stack
+  // Lowest range-damage first → bottom of stack (highest DPS renders on top)
   const sorted = Object.entries(players)
     .filter(([name]) => !hiddenPlayers.value.has(name) && filteredNames.has(name))
     .sort(([, a], [, b]) => rangeDmg(a) - rangeDmg(b))
-    .slice(0, 15)
 
   const datasets = sorted.map(([name, cumul]) => {
     const color = CLASS_COLORS[props.players.find(p => p.name === name)?.class_name ?? ''] ?? 'hsl(271, 76%, 43%)'

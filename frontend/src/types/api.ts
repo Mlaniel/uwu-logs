@@ -101,13 +101,16 @@ export interface TargetGroups {
 
 // Per-type hit statistics from format_hits_data() in logs_dmg_breakdown.py.
 // All numeric values are pre-formatted strings with space thousands-separators ("1 234").
+// hits_avg / crits_avg: [max, top10%avg, top50%avg, bot50%avg, bot10%avg, min]
 export interface HitStats {
-  total: string     // hits + crits count
-  hits: string      // non-crit count
-  crits: string     // crit count
-  percent: string   // crit rate e.g. "20.0%"
-  hit_avg: string   // avg non-crit value
-  crit_avg: string  // avg crit value
+  total: string        // hits + crits count
+  hits: string         // non-crit count
+  crits: string        // crit count
+  percent: string      // crit rate e.g. "20.0%"
+  hit_avg: string      // avg non-crit value
+  hits_avg: string[]   // [max, top10%avg, top50%avg, bot50%avg, bot10%avg, min]
+  crit_avg: string     // avg crit value
+  crits_avg: string[]  // same structure for crits
 }
 
 // Per-spell hit data split by direct (HIT) vs periodic (DOT).
@@ -129,8 +132,12 @@ export interface PlayerApiResponse {
   SPELLS_DATA: Record<string, SpellInfo>
   HITS: Record<string, SpellHitData>
   MISSES: Record<string, string>
+  // Miss type counts per spell: { MISS, DODGE, PARRY, RESIST, ABSORB, IMMUNE, BLOCK, GLANCING, REFLECT }
+  MISS_DETAILED: Record<string, Record<string, string>>
+  // Damage reduction amounts per spell: { OVERKILL, RESISTED, ABSORBED, GLANCED }
+  REDUCED_DETAILED: Record<string, Record<string, string>>
   TARGETS: TargetGroups
-  PETS: Record<string, string>          // pet_guid → pet_name
+  PETS: Record<string, string>
 }
 
 // One spell row assembled from PlayerApiResponse for SpellTable display.
@@ -143,13 +150,41 @@ export interface SpellRow {
   actual: string
   percent: number
   casts: string
-  // Extended — Player detail page only
-  hit_total?: string   // direct + periodic combined hits+crits count
-  crits?: string       // combined crit count
-  crit_pct?: string    // combined crit rate "20.0%"
-  avg_hit?: string     // avg non-crit (direct)
-  avg_crit?: string    // avg crit (direct)
-  misses?: string      // miss/dodge/parry/resist count
+
+  // ── Direct hit breakdown ────────────────────────────────────────────────────
+  hit_total?: string     // combined direct+dot hits+crits count
+  direct_hits?: string   // direct non-crit count
+  direct_crits?: string  // direct crit count
+  crit_pct?: string      // combined crit% (direct+dot)
+  avg_hit?: string       // avg direct non-crit
+  avg_crit?: string      // avg direct crit
+  max_hit?: string       // max direct hit
+  max_crit?: string      // max direct crit
+
+  // ── Periodic (DoT) breakdown ────────────────────────────────────────────────
+  dot_hits?: string      // dot non-crit tick count
+  dot_crits?: string     // dot crit tick count
+  dot_crit_pct?: string  // dot crit %
+  dot_avg_hit?: string   // avg dot tick
+  dot_avg_crit?: string  // avg dot crit tick
+  dot_max_hit?: string   // max dot tick
+
+  // ── Miss types (counts) ─────────────────────────────────────────────────────
+  misses?: string        // total miss events
+  miss?: string          // straight MISS
+  dodge?: string         // DODGE
+  parry?: string         // PARRY
+  resist_miss?: string   // RESIST (count)
+  absorb_miss?: string   // full-ABSORB miss
+  immune?: string        // IMMUNE
+  glancing?: string      // GLANCING blow count
+  block?: string         // BLOCK
+  reflect?: string       // REFLECT
+
+  // ── Damage modifiers (amounts) ──────────────────────────────────────────────
+  overkill?: string      // overkill damage amount
+  resisted?: string      // resisted damage amount
+  absorbed?: string      // absorbed (shield) damage amount
 }
 
 // One death entry from get_deaths_v2_wrap(). The `death` field is a list of

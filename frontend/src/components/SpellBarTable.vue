@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, watch } from 'vue'
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -41,6 +41,33 @@ function barColor(color: string): string {
 // ── Column definitions ─────────────────────────────────────────────────
 const ch = createColumnHelper<SpellRow>()
 
+function numCol(
+  id: keyof SpellRow,
+  header: string,
+  cls = 'col-sm num',
+  extraCls?: string,
+) {
+  return ch.accessor(id, {
+    id,
+    header,
+    meta: { cls: extraCls ? `${cls} ${extraCls}` : cls },
+    cell: info => (info.getValue() as string) || '—',
+    sortingFn: (a, b) => parseNum(a.original[id] as string) - parseNum(b.original[id] as string),
+  })
+}
+
+function pctCol(id: keyof SpellRow, header: string, extraCls?: string) {
+  return ch.accessor(id, {
+    id,
+    header,
+    meta: { cls: extraCls ? `col-sm num ${extraCls}` : 'col-sm num' },
+    cell: info => (info.getValue() as string) || '—',
+    sortingFn: (a, b) =>
+      parseFloat((a.original[id] as string ?? '').replace('%', '') || '0') -
+      parseFloat((b.original[id] as string ?? '').replace('%', '') || '0'),
+  })
+}
+
 const columns = [
   ch.display({
     id: 'spell',
@@ -70,48 +97,46 @@ const columns = [
       return h('div', { style: 'display:contents' }, [icon, nameEl].filter(Boolean))
     },
   }),
-  ch.accessor('casts', {
-    id: 'casts',
-    header: 'Casts',
-    meta: { cls: 'col-sm num' },
-    cell: info => info.getValue() || '—',
-    sortingFn: (a, b) => parseNum(a.original.casts) - parseNum(b.original.casts),
-  }),
-  ch.accessor('hit_total', {
-    id: 'hits',
-    header: 'Hits',
-    meta: { cls: 'col-sm num' },
-    cell: info => info.getValue() || '—',
-    sortingFn: (a, b) => parseNum(a.original.hit_total) - parseNum(b.original.hit_total),
-  }),
-  ch.accessor('crit_pct', {
-    id: 'crit_pct',
-    header: 'Crit%',
-    meta: { cls: 'col-sm num crit-pct' },
-    cell: info => info.getValue() || '—',
-    sortingFn: (a, b) => parseFloat(a.original.crit_pct ?? '0') - parseFloat(b.original.crit_pct ?? '0'),
-  }),
-  ch.accessor('avg_hit', {
-    id: 'avg_hit',
-    header: 'Avg',
-    meta: { cls: 'col-sm num' },
-    cell: info => info.getValue() || '—',
-    sortingFn: (a, b) => parseNum(a.original.avg_hit) - parseNum(b.original.avg_hit),
-  }),
-  ch.accessor('avg_crit', {
-    id: 'avg_crit',
-    header: 'Avg↑',
-    meta: { cls: 'col-sm num crit-val' },
-    cell: info => info.getValue() || '—',
-    sortingFn: (a, b) => parseNum(a.original.avg_crit) - parseNum(b.original.avg_crit),
-  }),
-  ch.accessor('misses', {
-    id: 'misses',
-    header: 'Misses',
-    meta: { cls: 'col-sm num' },
-    cell: info => info.getValue() || '—',
-    sortingFn: (a, b) => parseNum(a.original.misses) - parseNum(b.original.misses),
-  }),
+
+  // ── Casts ──────────────────────────────────────────────────────────────────
+  numCol('casts', 'Casts'),
+
+  // ── Direct hits ────────────────────────────────────────────────────────────
+  numCol('hit_total',    'Hits'),
+  numCol('direct_hits',  'D.Hits'),
+  numCol('direct_crits', 'D.Crits',  'col-sm num', 'crit-val'),
+  pctCol('crit_pct',     'Crit%',    'crit-pct'),
+  numCol('avg_hit',      'Avg'),
+  numCol('avg_crit',     'Avg↑',     'col-sm num', 'crit-val'),
+  numCol('max_hit',      'Max'),
+  numCol('max_crit',     'Max↑',     'col-sm num', 'crit-val'),
+
+  // ── Periodic (DoT) ─────────────────────────────────────────────────────────
+  numCol('dot_hits',     'DoT Hits'),
+  numCol('dot_crits',    'DoT Crits', 'col-sm num', 'crit-val'),
+  pctCol('dot_crit_pct', 'DoT Crit%', 'crit-pct'),
+  numCol('dot_avg_hit',  'DoT Avg'),
+  numCol('dot_avg_crit', 'DoT Avg↑',  'col-sm num', 'crit-val'),
+  numCol('dot_max_hit',  'DoT Max'),
+
+  // ── Misses ─────────────────────────────────────────────────────────────────
+  numCol('misses',      'Misses'),
+  numCol('miss',        'Miss'),
+  numCol('dodge',       'Dodge'),
+  numCol('parry',       'Parry'),
+  numCol('glancing',    'Glance'),
+  numCol('block',       'Block'),
+  numCol('resist_miss', 'Resist'),
+  numCol('absorb_miss', 'Absorb'),
+  numCol('immune',      'Immune'),
+  numCol('reflect',     'Reflect'),
+
+  // ── Damage modifiers ───────────────────────────────────────────────────────
+  numCol('overkill', 'Overkill'),
+  numCol('absorbed', 'Absorbed'),
+  numCol('resisted', 'Resisted'),
+
+  // ── Bar + total ────────────────────────────────────────────────────────────
   ch.display({
     id: 'bar',
     header: '',
@@ -119,15 +144,16 @@ const columns = [
     meta: { cls: 'col-bar', noHide: true },
     cell: ({ row }) => {
       const item = row.original
+      const pct = maxActual.value > 0 ? parseNum(item.actual) / maxActual.value * 100 : 0
       return h('div', {
         class: 'bar-fill',
-        style: { width: item.percent + '%', background: barColor(item.color) },
+        style: { width: pct + '%', background: barColor(item.color) },
       })
     },
   }),
   ch.accessor('actual', {
     id: 'total_dmg',
-    header: 'Total Dmg',
+    header: 'Total',
     meta: { cls: 'col-val gs num', noHide: true },
     cell: info => info.getValue() || '—',
     sortingFn: (a, b) => parseNum(a.original.actual) - parseNum(b.original.actual),
@@ -142,10 +168,52 @@ const columns = [
 ]
 
 // ── Presets ────────────────────────────────────────────────────────────
+const HIDDEN_BY_DEFAULT = {
+  direct_hits: false, direct_crits: false,
+  max_hit: false, max_crit: false,
+  dot_hits: false, dot_crits: false, dot_crit_pct: false,
+  dot_avg_hit: false, dot_avg_crit: false, dot_max_hit: false,
+  miss: false, dodge: false, parry: false, glancing: false,
+  block: false, resist_miss: false, absorb_miss: false,
+  immune: false, reflect: false,
+  overkill: false, absorbed: false, resisted: false,
+}
+
 const PRESETS: Record<string, VisibilityState> = {
-  Default:        { misses: false },
-  Summary:        { casts: false, hits: false, crit_pct: false, avg_hit: false, avg_crit: false, misses: false },
-  'Hit Analysis': { casts: false, misses: false },
+  Default: {
+    ...HIDDEN_BY_DEFAULT,
+    misses: false,
+  },
+  Summary: {
+    ...HIDDEN_BY_DEFAULT,
+    casts: false, hit_total: false, crit_pct: false,
+    avg_hit: false, avg_crit: false, misses: false,
+  },
+  'Hit Detail': {
+    ...HIDDEN_BY_DEFAULT,
+    direct_hits: true, direct_crits: true,
+    max_hit: true, max_crit: true,
+    misses: false,
+  },
+  'DoT Detail': {
+    ...HIDDEN_BY_DEFAULT,
+    dot_hits: true, dot_crits: true, dot_crit_pct: true,
+    dot_avg_hit: true, dot_avg_crit: true,
+    misses: false,
+  },
+  'Miss Detail': {
+    ...HIDDEN_BY_DEFAULT,
+    miss: true, dodge: true, parry: true, glancing: true,
+    block: true, resist_miss: true, absorb_miss: true,
+    immune: true, reflect: true,
+    hit_total: false, crit_pct: false, avg_hit: false, avg_crit: false,
+  },
+  'Dmg Modifiers': {
+    ...HIDDEN_BY_DEFAULT,
+    overkill: true, absorbed: true, resisted: true,
+    hit_total: false, crit_pct: false, avg_hit: false, avg_crit: false,
+    misses: false,
+  },
 }
 
 const {
@@ -176,6 +244,28 @@ const table = useVueTable({
 const hideableCols = computed(() =>
   table.getAllLeafColumns().filter(c => !c.columnDef.meta?.noHide)
 )
+
+const maxActual = computed(() =>
+  props.spells.reduce((max, r) => Math.max(max, parseNum(r.actual)), 0)
+)
+
+// Auto-hide columns where every row has no data.
+// Only hides — never auto-shows — so user preset choices are preserved.
+watch(() => props.spells, spells => {
+  if (!spells.length) return
+  const updates: VisibilityState = {}
+  for (const col of hideableCols.value) {
+    const id = col.id as keyof SpellRow
+    const hasData = spells.some(r => {
+      const v = r[id]
+      return v !== undefined && v !== '' && v !== '0'
+    })
+    if (!hasData) updates[col.id] = false
+  }
+  if (Object.keys(updates).length) {
+    columnVisibility.value = { ...columnVisibility.value, ...updates }
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -305,7 +395,7 @@ const hideableCols = computed(() =>
 }
 
 .col-bar {
-  width: 120px;
+  width: 200px;
   flex-shrink: 0;
   padding: 0 8px;
   display: flex;
