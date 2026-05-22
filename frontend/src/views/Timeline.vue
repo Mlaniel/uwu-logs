@@ -381,6 +381,7 @@ const damageRouteQuery = computed(() => {
       </BasePage>
       <nav class="sidebar-nav">
         <router-link :to="{ path: `/reports/${reportId}`, query: damageRouteQuery }" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
+        <router-link :to="{ path: `/reports/${reportId}/deaths`, query: damageRouteQuery }" class="sidebar-nav-link">Deaths</router-link>
         <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
         <router-link :to="{ path: `/reports/${reportId}/compare`, query: damageRouteQuery }" class="sidebar-nav-link">Compare</router-link>
       </nav>
