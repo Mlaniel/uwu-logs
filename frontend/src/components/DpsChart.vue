@@ -171,6 +171,16 @@ interface ReviveMark {
   spell: string
 }
 
+function resolveGuid(raw: string | number): string {
+  const s = String(raw ?? '')
+  return deathData.value?.GUIDS[s] ?? s
+}
+
+function resolveSpell(raw: string | number): string {
+  const s = String(raw ?? '')
+  return deathData.value?.SPELLS[s]?.name ?? s
+}
+
 const deathMarks = computed<DeathMark[]>(() => {
   if (!deathData.value || !isLineMode.value) return []
   return Object.entries(deathData.value.DEATHS)
@@ -179,14 +189,14 @@ const deathMarks = computed<DeathMark[]>(() => {
       return first && String(first[1]) !== 'RESURRECT'
     })
     .map(([key, entry]) => {
-      const sec = Math.round(parseFloat(key))
+      const sec  = Math.round(parseFloat(key))
       const guid = deathData.value!.PLAYERS[entry.player]
       const cls  = guid ? (deathData.value!.CLASSES[guid] ?? '') : ''
       const kb   = entry.death[1]
       let cause = '', amount = ''
       if (kb && String(kb[1]) === 'DAMAGE') {
-        const src   = String(kb[3] ?? '')
-        const spell = String(kb[5] ?? '')
+        const src   = resolveGuid(kb[3] ?? '')
+        const spell = resolveSpell(kb[5] ?? '')
         cause = (src && src !== entry.player) ? `${src} — ${spell}` : spell
         const v = kb[6]
         if (v != null && v !== '' && v !== 0)
@@ -215,8 +225,8 @@ const reviveMarks = computed<ReviveMark[]>(() => {
       return {
         sec,
         target: entry.player,
-        caster: String(line[3] ?? ''),
-        spell:  String(line[5] ?? ''),
+        caster: resolveGuid(line[3] ?? ''),
+        spell:  resolveSpell(line[5] ?? ''),
       }
     })
 })
