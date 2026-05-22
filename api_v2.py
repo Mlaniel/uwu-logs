@@ -159,6 +159,62 @@ def recent_reports():
     return jsonify(results)
 
 
+# ─── GET /api/v2/logs/ ───────────────────────────────────────────────────────
+
+@apiv2_bp.route("/logs/")
+def logs():
+    df = logs_calendar.read_main_df()
+
+    servers: list[str] = []
+    if not df.empty and "server" in df.columns:
+        servers = sorted(df["server"].dropna().unique().tolist())
+
+    results = []
+    if not df.empty:
+        q      = request.args.get("q",      "").strip().lower()
+        server = request.args.get("server", "").strip()
+        year   = request.args.get("year",   type=int)
+        month  = request.args.get("month",  type=int)
+
+        if server and "server" in df.columns:
+            df = df[df["server"] == server]
+        if year and "year" in df.columns:
+            df = df[df["year"] == year % 100]
+        if month and "month" in df.columns:
+            df = df[df["month"] == month]
+        if q:
+            def _matches(row):
+                if q in str(row.get("author", "")).lower():
+                    return True
+                for p in (row.get("player") or ()):
+                    if q in p.lower():
+                        return True
+                return False
+            mask = df.apply(_matches, axis=1)
+            df = df[mask]
+
+        sort_cols = [c for c in ("year", "month", "day", "time") if c in df.columns]
+        if sort_cols:
+            df = df.sort_values(by=sort_cols, ascending=False)
+
+        for report_id, row in df.head(200).iterrows():
+            fights    = row.get("fight", ()) or ()
+            year_val  = int(row.get("year",  0))
+            month_val = int(row.get("month", 0))
+            day_val   = int(row.get("day",   0))
+            date_str  = f"20{year_val:02d}-{month_val:02d}-{day_val:02d}" if year_val else ""
+            results.append({
+                "id":          report_id,
+                "name":        row.get("author", report_id),
+                "server":      row.get("server", ""),
+                "boss_count":  len(fights),
+                "latest_boss": fights[-1] if fights else "",
+                "date":        date_str,
+            })
+
+    return jsonify({"results": results, "servers": servers})
+
+
 # ─── GET /api/v2/reports/<id>/player/<name>/ ─────────────────────────────────
 
 @apiv2_bp.route("/reports/<report_id>/player/<path:source>/")

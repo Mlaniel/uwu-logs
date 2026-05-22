@@ -6,7 +6,7 @@
     <router-link to="/" class="nav-logo">UwU LOGS</router-link>
     <div class="nav-links">
       <router-link to="/" class="nav-item">My Logs</router-link>
-      <a href="/logs_list" class="nav-item">Raid Logs</a>
+      <router-link to="/logs" class="nav-item">Raid Logs</router-link>
       <a href="/top" class="nav-item">Rankings</a>
       <a href="/character" class="nav-item">Characters</a>
     </div>

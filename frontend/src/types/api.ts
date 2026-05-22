@@ -81,6 +81,11 @@ export interface RecentReport {
   date: string
 }
 
+export interface LogsApiResponse {
+  results: RecentReport[]
+  servers: string[]
+}
+
 // ── Phase 1b types ──────────────────────────────────────────────────────────
 
 // Spell metadata from Spell.to_dict() in logs_spells_list.py.
