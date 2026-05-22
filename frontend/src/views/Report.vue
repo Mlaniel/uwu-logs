@@ -14,7 +14,7 @@ import type { BossAttempt, AllGraphData, Player, RaidGraphData } from '../types/
 const route = useRoute()
 const router = useRouter()
 const { report, players, loading, error, fetchOverview } = useReport()
-const { activeView, specFilter, sortKey, sortDir, filteredPlayers, setSort, toggleSpec } = useFilters(players)
+const { activeView, specFilter, filteredPlayers, toggleSpec } = useFilters(players)
 
 const reportId = computed(() => route.params.id as string)
 
@@ -268,9 +268,6 @@ const displayPlayers = computed<Player[]>(() => {
         <!-- Player table — receives range-derived stats when a range is active -->
         <PlayerTable
           :players="displayPlayers"
-          :sort-key="sortKey"
-          :sort-dir="sortDir"
-          @sort="setSort"
           @player-click="goPlayer"
         />
       </BasePage>

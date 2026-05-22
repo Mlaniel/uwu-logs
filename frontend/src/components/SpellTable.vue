@@ -1,182 +1,255 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, h } from 'vue'
+import {
+  createColumnHelper,
+  getCoreRowModel,
+  getSortedRowModel,
+  useVueTable,
+  FlexRender,
+  type SortingState,
+} from '@tanstack/vue-table'
 import type { SpellRow } from '../types/api'
 
 const props = defineProps<{
   spells: SpellRow[]
 }>()
 
-// Extended mode when rows carry hit-level detail (Player page).
-const extended = computed(() => props.spells.some(r => r.hit_total !== undefined))
+function parseNum(s: string | undefined): number {
+  if (!s) return 0
+  return parseFloat(s.replace(/\s/g, '')) || 0
+}
+
+// ── Column definitions ─────────────────────────────────────────────────
+const ch = createColumnHelper<SpellRow>()
+
+const columns = [
+  ch.display({
+    id: 'spell',
+    header: 'Spell',
+    enableSorting: false,
+    meta: { cls: 'col-name' },
+    cell: ({ row }) => {
+      const item = row.original
+      const icon = item.icon
+        ? h('img', {
+            src: `/static/icons/${item.icon}.jpg`,
+            alt: item.name,
+            class: 'spell-icon',
+            width: 20,
+            height: 20,
+          })
+        : null
+      const nameEl = item.spell_id && !item.spell_id.includes('--')
+        ? h('a', {
+            href: `https://www.wowhead.com/wotlk/spell=${item.spell_id}`,
+            target: '_blank',
+            rel: 'noreferrer',
+            class: 'spell-link',
+            style: item.color ? { color: item.color } : undefined,
+          }, item.name)
+        : h('span', { style: item.color ? { color: item.color } : undefined }, item.name)
+      return h('div', { style: 'display:contents' }, [icon, nameEl].filter(Boolean))
+    },
+  }),
+  ch.accessor('casts', {
+    id: 'casts',
+    header: 'Casts',
+    meta: { cls: 'col-casts num' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.casts) - parseNum(b.original.casts),
+  }),
+  ch.accessor('percent', {
+    id: 'percent',
+    header: '%',
+    meta: { cls: 'col-pct num' },
+    cell: ({ getValue }) => {
+      const v = getValue()
+      return v != null ? v + '%' : '—'
+    },
+    sortingFn: (a, b) => (a.original.percent ?? 0) - (b.original.percent ?? 0),
+  }),
+  ch.accessor('actual', {
+    id: 'actual',
+    header: 'Amount',
+    meta: { cls: 'col-amount num' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.actual) - parseNum(b.original.actual),
+  }),
+  ch.display({
+    id: 'bar',
+    header: '',
+    enableSorting: false,
+    meta: { cls: 'col-bar' },
+    cell: ({ row }) => h('div', {
+      class: 'bar-fill',
+      style: { width: (row.original.percent ?? 0) + '%' },
+    }),
+  }),
+]
+
+const sorting = ref<SortingState>([{ id: 'percent', desc: true }])
+
+const table = useVueTable({
+  get data() { return props.spells },
+  columns,
+  enableMultiSort: false,
+  state: {
+    get sorting() { return sorting.value },
+  },
+  onSortingChange: upd => {
+    sorting.value = typeof upd === 'function' ? upd(sorting.value) : upd
+  },
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+})
 </script>
 
 <template>
-  <div class="spell-table-wrap">
+  <div class="spell-table">
 
-    <!-- Extended header (Player detail) -->
-    <div v-if="extended" class="spell-thead spell-thead--ext">
-      <div class="col-icon" />
-      <div class="col-name">Spell</div>
-      <div class="col-num">Casts</div>
-      <div class="col-num">Hits</div>
-      <div class="col-num">Crits</div>
-      <div class="col-num">Crit%</div>
-      <div class="col-num">Avg Hit</div>
-      <div class="col-num">Avg Crit</div>
-      <div class="col-num">Misses</div>
-      <div class="col-amount">Amount</div>
-      <div class="col-bar" />
-    </div>
-
-    <!-- Basic header (Compare) -->
-    <div v-else class="spell-thead">
-      <div class="col-icon" />
-      <div class="col-name">Spell</div>
-      <div class="col-casts">Casts</div>
-      <div class="col-pct">%</div>
-      <div class="col-amount">Amount</div>
-      <div class="col-bar" />
-    </div>
-
-    <div
-      v-for="item in spells"
-      :key="item.spell_id"
-      class="spell-row"
-      :class="extended ? 'spell-row--ext' : ''"
-    >
-      <div class="col-icon">
-        <img
-          v-if="item.icon"
-          :src="`/static/icons/${item.icon}.jpg`"
-          :alt="item.name"
-          class="spell-icon"
-        />
-      </div>
-      <div class="col-name" :style="{ color: item.color || undefined }">
-        <a
-          v-if="item.spell_id && !item.spell_id.includes('--')"
-          :href="`https://www.wowhead.com/wotlk/spell=${item.spell_id}`"
-          target="_blank"
-          rel="noreferrer"
-          class="spell-link"
-          :style="{ color: item.color || undefined }"
-        >{{ item.name }}</a>
-        <span v-else>{{ item.name }}</span>
-      </div>
-
-      <!-- Extended columns -->
-      <template v-if="extended">
-        <div class="col-num number">{{ item.casts }}</div>
-        <div class="col-num number">{{ item.hit_total }}</div>
-        <div class="col-num number">{{ item.crits }}</div>
-        <div class="col-num number crit-pct">{{ item.crit_pct }}</div>
-        <div class="col-num number">{{ item.avg_hit }}</div>
-        <div class="col-num number crit-val">{{ item.avg_crit }}</div>
-        <div class="col-num number miss">{{ item.misses }}</div>
-        <div class="col-amount number">{{ item.actual }}</div>
-      </template>
-
-      <!-- Basic columns -->
-      <template v-else>
-        <div class="col-casts number">{{ item.casts }}</div>
-        <div class="col-pct number">{{ item.percent }}%</div>
-        <div class="col-amount number">{{ item.actual }}</div>
-      </template>
-
-      <div class="col-bar">
+    <!-- Header row -->
+    <div class="row hdr">
+      <template
+        v-for="header in (table.getHeaderGroups()[0]?.headers ?? [])"
+        :key="header.id"
+      >
         <div
-          class="bar-fill"
-          :style="{ width: item.percent + '%' }"
-        />
+          :class="[header.column.columnDef.meta?.cls, { sortable: header.column.getCanSort() }]"
+          @click="header.column.getToggleSortingHandler()?.($event)"
+        >
+          <FlexRender
+            v-if="!header.isPlaceholder"
+            :render="header.column.columnDef.header"
+            :props="header.getContext()"
+          />{{
+            header.column.getIsSorted() === 'desc' ? ' ↓'
+            : header.column.getIsSorted() === 'asc' ? ' ↑'
+            : ''
+          }}
+        </div>
+      </template>
+    </div>
+
+    <!-- Data rows -->
+    <div
+      v-for="row in table.getRowModel().rows"
+      :key="row.id"
+      class="row data-row"
+    >
+      <div
+        v-for="cell in row.getVisibleCells()"
+        :key="cell.id"
+        :class="[cell.column.columnDef.meta?.cls]"
+      >
+        <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
       </div>
     </div>
+
   </div>
 </template>
 
 <style scoped>
-.spell-table-wrap {
+.spell-table {
   display: flex;
   flex-direction: column;
 }
 
-/* ── Basic layout (Compare) ── */
-.spell-thead,
-.spell-row {
-  display: grid;
-  grid-template-columns: 32px 1fr 72px 58px 120px 120px;
+.row {
+  display: flex;
   align-items: center;
-  height: 40px;
-  padding: 0 6px;
-  gap: 6px;
+  height: 38px;
+  border-bottom: 1px solid var(--table-border);
 }
 
-/* ── Extended layout (Player detail) ── */
-.spell-thead--ext,
-.spell-row--ext {
-  grid-template-columns: 32px 1fr repeat(7, 76px) 120px 100px;
-}
-
-.spell-thead {
+/* ── Header ── */
+.hdr {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
-  border-bottom: 1px solid var(--table-border);
+  user-select: none;
 }
+.hdr .sortable { cursor: pointer; }
+.hdr .sortable:hover { color: var(--text); }
 
-.spell-row {
-  border-bottom: 1px solid var(--table-border);
-  font-size: 0.8125rem;
-}
+/* ── Data rows ── */
+.data-row:hover { background: var(--hover-row); }
 
-.spell-row:hover {
-  background: var(--hover-row);
+/* ── Columns ── */
+.col-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow: hidden;
 }
 
 .spell-icon {
-  width: 30px;
-  height: 30px;
+  flex-shrink: 0;
+  border-radius: 2px;
   display: block;
-}
-
-.col-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .spell-link {
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
 }
-.spell-link:hover {
-  text-decoration: underline;
+.spell-link:hover { text-decoration: underline; }
+
+.col-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
 }
 
-.number {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-variant-numeric: tabular-nums;
+.col-casts {
+  width: 64px;
+  flex-shrink: 0;
+  padding: 0 8px;
   text-align: right;
 }
 
-.col-num { text-align: right; }
+.col-pct {
+  width: 52px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  text-align: right;
+}
 
-.crit-pct  { color: #ffd700; }
-.crit-val  { color: #ffd700; }
-.miss      { color: var(--text-muted); }
+.col-amount {
+  width: 100px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  text-align: right;
+}
 
 .col-bar {
-  position: relative;
-  height: 6px;
-  background: var(--table-border);
+  width: 100px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
 }
 
 .bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
+  height: 6px;
   background: var(--primary-dim);
-  min-width: 0;
+  border-radius: 1px;
   max-width: 100%;
+  flex-shrink: 0;
+}
+
+.num {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
 }
 </style>

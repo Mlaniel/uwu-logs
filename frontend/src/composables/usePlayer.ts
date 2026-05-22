@@ -33,7 +33,7 @@ export function usePlayer() {
           icon: spell.icon,
           color: spell.color,
           actual:  ACTUAL[id]         ?? '',
-          percent: ACTUAL_PERCENT[id] ?? 0,
+          percent: parseFloat((ACTUAL_PERCENT[id] ?? '0').replace('%', '')) || 0,
           casts:   CASTS[id]          ?? '',
           hit_total: total     > 0 ? total.toString()     : '',
           crits:     critCount > 0 ? critCount.toString() : '',

@@ -1,18 +1,27 @@
 <script setup lang="ts">
+import { computed, h } from 'vue'
+import {
+  createColumnHelper,
+  getCoreRowModel,
+  getSortedRowModel,
+  useVueTable,
+  FlexRender,
+} from '@tanstack/vue-table'
+import type { VisibilityState } from '@tanstack/vue-table'
 import type { Player } from '../types/api'
-import type { SortKey } from '../composables/useFilters'
 import { POINTS } from '../constants/bosses'
+import { useTablePresets } from '../composables/useTablePresets'
+import TableToolbar from './TableToolbar.vue'
 
 const props = defineProps<{
   players: Player[]
-  sortKey: SortKey
-  sortDir: 'asc' | 'desc'
 }>()
 
 const emit = defineEmits<{
-  sort: [key: SortKey]
   'player-click': [name: string]
 }>()
+
+// ── Utilities ──────────────────────────────────────────────────────────────
 
 function rankClass(pct: number): string {
   for (const t of POINTS) if (pct >= t) return `top${t}`
@@ -30,11 +39,6 @@ function rankBarColor(pct: number): string {
   return 'rgba(102,102,102,0.55)'
 }
 
-function si(key: SortKey): string {
-  if (props.sortKey !== key) return ''
-  return props.sortDir === 'desc' ? ' ↓' : ' ↑'
-}
-
 function classSlug(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-')
 }
@@ -45,78 +49,249 @@ function fmtRate(v: number): string {
   if (v >= 1_000)     return (v / 1_000).toFixed(1) + 'k'
   return v.toFixed(0)
 }
+
+// ── Presets (must be before columns so sortingFn can close over `sorting`) ──
+
+const PRESETS: Record<string, VisibilityState> = {
+  Default:        {},
+  'DPS Focus':    { heal: false, heal_bar: false, hps: false, taken: false, taken_bar: false, dtps: false },
+  'Healer Focus': { useful_dmg: false, dmg_bar: false, dps: false },
+  Summary:        { active_pct: false, casts: false, taken: false, taken_bar: false, dtps: false },
+}
+
+const {
+  columnVisibility, sorting, activePreset, importError,
+  applyPreset, exportPreset, importPreset,
+  onColumnVisibilityChange, onSortingChange,
+} = useTablePresets({
+  storageKey:     'uwu-player-cols',
+  presets:        PRESETS,
+  defaultPreset:  'Default',
+  defaultSorting: [{ id: 'useful_dmg', desc: true }],
+})
+
+// Healer rows always sort last regardless of direction.
+// TanStack multiplies sortingFn result by -1 for desc, which would flip healers
+// to the top. Pre-multiply by -1 for desc to cancel the inversion.
+function healerSortFn(
+  a: { original: Player },
+  b: { original: Player },
+  columnId: string,
+): number {
+  const aNull = a.original.useful === null
+  const bNull = b.original.useful === null
+  if (aNull !== bNull) {
+    const desc = sorting.value.find(s => s.id === columnId)?.desc ?? false
+    return (desc ? -1 : 1) * (aNull ? 1 : -1)
+  }
+  return (a.original.useful?.per_second ?? a.original.damage.per_second) -
+         (b.original.useful?.per_second ?? b.original.damage.per_second)
+}
+
+// ── Column definitions ─────────────────────────────────────────────────────
+
+const ch = createColumnHelper<Player>()
+
+const columns = [
+  ch.accessor('name', {
+    id: 'name',
+    header: 'Name',
+    meta: { cls: 'col-name', noHide: true },
+    cell: ({ row }) => {
+      const p = row.original
+      return h('div', { style: 'display:contents' }, [
+        h('img', { class: 'spec-icon', src: `/static/icons/${p.spec_icon}.jpg`, alt: p.spec_name, width: 16, height: 16 }),
+        h('span', { class: classSlug(p.class_name) }, p.name),
+      ])
+    },
+    sortingFn: (a, b) => a.original.name.localeCompare(b.original.name),
+  }),
+  ch.accessor('active_pct', {
+    id: 'active_pct',
+    header: 'Active%',
+    meta: { cls: 'col-sm num' },
+    cell: ({ getValue }) => {
+      const v = getValue()
+      return v ? v.toFixed(1) + '%' : '—'
+    },
+    sortingFn: (a, b) => a.original.active_pct - b.original.active_pct,
+  }),
+  ch.accessor('casts', {
+    id: 'casts',
+    header: 'Casts',
+    meta: { cls: 'col-sm num' },
+    cell: ({ getValue }) => getValue() || '—',
+    sortingFn: (a, b) => a.original.casts - b.original.casts,
+  }),
+
+  // ── Damage group ───────────────────────────────────────────────────────────
+  ch.accessor(r => r.useful?.per_second ?? r.damage.per_second, {
+    id: 'useful_dmg',
+    header: 'Damage',
+    meta: { cls: 'col-val gs' },
+    cell: ({ row }) => {
+      const p   = row.original
+      const pct = p.useful?.percent ?? 0
+      return h('span', { class: rankClass(pct) }, p.useful?.value || p.damage.value || '—')
+    },
+    sortingFn: healerSortFn,
+  }),
+  ch.display({
+    id: 'dmg_bar',
+    header: '',
+    enableSorting: false,
+    meta: { cls: 'col-bar', noHide: true },
+    cell: ({ row }) => {
+      const p   = row.original
+      const pct = p.useful?.percent ?? 0
+      return h('div', {
+        class: 'bar-fill',
+        style: { width: pct + '%', background: rankBarColor(pct) },
+      })
+    },
+  }),
+  ch.accessor(r => r.useful?.per_second ?? r.damage.per_second, {
+    id: 'dps',
+    header: 'DPS',
+    meta: { cls: 'col-rate num' },
+    cell: ({ row }) => {
+      const p = row.original
+      return fmtRate(p.useful?.per_second ?? p.damage.per_second)
+    },
+    sortingFn: healerSortFn,
+  }),
+
+  // ── Heal group ─────────────────────────────────────────────────────────────
+  ch.accessor(r => r.heal.per_second, {
+    id: 'heal',
+    header: 'Heal',
+    meta: { cls: 'col-val gs' },
+    cell: ({ row }) => {
+      const p = row.original
+      return h('span', { class: rankClass(p.heal.percent) }, p.heal.value || '—')
+    },
+  }),
+  ch.display({
+    id: 'heal_bar',
+    header: '',
+    enableSorting: false,
+    meta: { cls: 'col-bar', noHide: true },
+    cell: ({ row }) => {
+      const p = row.original
+      return h('div', {
+        class: 'bar-fill',
+        style: { width: p.heal.percent + '%', background: rankBarColor(p.heal.percent) },
+      })
+    },
+  }),
+  ch.accessor(r => r.heal.per_second, {
+    id: 'hps',
+    header: 'HPS',
+    meta: { cls: 'col-rate num' },
+    cell: ({ row }) => fmtRate(row.original.heal.per_second),
+  }),
+
+  // ── Taken group ────────────────────────────────────────────────────────────
+  ch.accessor(r => r.taken.per_second, {
+    id: 'taken',
+    header: 'Taken',
+    meta: { cls: 'col-val gs' },
+    cell: ({ row }) => {
+      const p = row.original
+      return h('span', { class: rankClass(p.taken.percent) }, p.taken.value || '—')
+    },
+  }),
+  ch.display({
+    id: 'taken_bar',
+    header: '',
+    enableSorting: false,
+    meta: { cls: 'col-bar', noHide: true },
+    cell: ({ row }) => {
+      const p = row.original
+      return h('div', {
+        class: 'bar-fill',
+        style: { width: p.taken.percent + '%', background: rankBarColor(p.taken.percent) },
+      })
+    },
+  }),
+  ch.accessor(r => r.taken.per_second, {
+    id: 'dtps',
+    header: 'DTPS',
+    meta: { cls: 'col-rate num' },
+    cell: ({ row }) => fmtRate(row.original.taken.per_second),
+    sortingFn: (a, b) => a.original.taken.per_second - b.original.taken.per_second,
+  }),
+]
+
+const table = useVueTable({
+  get data() { return props.players },
+  columns,
+  enableMultiSort: false,
+  state: {
+    get sorting()          { return sorting.value },
+    get columnVisibility() { return columnVisibility.value },
+  },
+  onSortingChange,
+  onColumnVisibilityChange,
+  getCoreRowModel:    getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+})
+
+const hideableCols = computed(() =>
+  table.getAllLeafColumns().filter(c => !c.columnDef.meta?.noHide)
+)
 </script>
 
 <template>
   <div class="player-table">
 
-    <!-- Header -->
+    <TableToolbar
+      :presets="PRESETS"
+      :active-preset="String(activePreset ?? '')"
+      :hideable-cols="hideableCols"
+      :import-error="importError"
+      @apply-preset="applyPreset"
+      @export="exportPreset"
+      @import="importPreset"
+    />
+
+    <!-- Header row -->
     <div class="row hdr">
-      <div class="col-name sortable" @click="emit('sort', 'name')">Name{{ si('name') }}</div>
-      <div class="col-sm  sortable" @click="emit('sort', 'active_pct')">Active%{{ si('active_pct') }}</div>
-      <div class="col-sm  sortable" @click="emit('sort', 'casts')">Casts{{ si('casts') }}</div>
-      <!-- Damage group -->
-      <div class="col-val sortable gs" @click="emit('sort', 'useful_dmg')">Damage{{ si('useful_dmg') }}</div>
-      <div class="col-bar" />
-      <div class="col-rate sortable" @click="emit('sort', 'dps')">DPS{{ si('dps') }}</div>
-      <!-- Heal group -->
-      <div class="col-val sortable gs" @click="emit('sort', 'heal')">Heal{{ si('heal') }}</div>
-      <div class="col-bar" />
-      <div class="col-rate sortable" @click="emit('sort', 'hps')">HPS{{ si('hps') }}</div>
-      <!-- Taken group -->
-      <div class="col-val sortable gs" @click="emit('sort', 'taken')">Taken{{ si('taken') }}</div>
-      <div class="col-bar" />
-      <div class="col-rate sortable" @click="emit('sort', 'dtps')">DTPS{{ si('dtps') }}</div>
+      <template
+        v-for="header in (table.getHeaderGroups()[0]?.headers ?? [])"
+        :key="header.id"
+      >
+        <div
+          :class="[header.column.columnDef.meta?.cls, { sortable: header.column.getCanSort() }]"
+          @click="header.column.getToggleSortingHandler()?.($event)"
+        >
+          <FlexRender
+            v-if="!header.isPlaceholder"
+            :render="header.column.columnDef.header"
+            :props="header.getContext()"
+          />{{
+            header.column.getIsSorted() === 'desc' ? ' ↓'
+            : header.column.getIsSorted() === 'asc' ? ' ↑'
+            : ''
+          }}
+        </div>
+      </template>
     </div>
 
     <!-- Data rows -->
     <div
-      v-for="p in players"
-      :key="p.name"
+      v-for="row in table.getRowModel().rows"
+      :key="row.id"
       class="row data-row"
-      :class="{ healer: p.useful === null }"
-      @click="emit('player-click', p.name)"
+      @click="emit('player-click', row.original.name)"
     >
-      <!-- Name -->
-      <div class="col-name">
-        <img class="spec-icon" :src="`/static/icons/${p.spec_icon}.jpg`" :alt="p.spec_name" width="16" height="16" />
-        <span :class="classSlug(p.class_name)">{{ p.name }}</span>
+      <div
+        v-for="cell in row.getVisibleCells()"
+        :key="cell.id"
+        :class="[cell.column.columnDef.meta?.cls]"
+      >
+        <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
       </div>
-
-      <!-- Active% -->
-      <div class="col-sm num">{{ p.active_pct ? p.active_pct.toFixed(1) + '%' : '—' }}</div>
-
-      <!-- Casts -->
-      <div class="col-sm num">{{ p.casts || '—' }}</div>
-
-      <!-- Damage group -->
-      <div class="col-val gs">
-        <span :class="rankClass(p.useful?.percent ?? 0)">
-          {{ p.useful?.value || p.damage.value || '—' }}
-        </span>
-      </div>
-      <div class="col-bar" :style="{ '--pct': (p.useful?.percent ?? 0) + '%', '--clr': rankBarColor(p.useful?.percent ?? 0) }">
-        <div class="bar-fill" />
-      </div>
-      <div class="col-rate num">{{ fmtRate(p.useful?.per_second ?? p.damage.per_second) }}</div>
-
-      <!-- Heal group -->
-      <div class="col-val gs">
-        <span :class="rankClass(p.heal.percent)">{{ p.heal.value || '—' }}</span>
-      </div>
-      <div class="col-bar" :style="{ '--pct': p.heal.percent + '%', '--clr': rankBarColor(p.heal.percent) }">
-        <div class="bar-fill" />
-      </div>
-      <div class="col-rate num">{{ fmtRate(p.heal.per_second) }}</div>
-
-      <!-- Taken group -->
-      <div class="col-val gs">
-        <span :class="rankClass(p.taken.percent)">{{ p.taken.value || '—' }}</span>
-      </div>
-      <div class="col-bar" :style="{ '--pct': p.taken.percent + '%', '--clr': rankBarColor(p.taken.percent) }">
-        <div class="bar-fill" />
-      </div>
-      <div class="col-rate num">{{ fmtRate(p.taken.per_second) }}</div>
     </div>
 
   </div>
@@ -128,15 +303,12 @@ function fmtRate(v: number): string {
   flex-direction: column;
 }
 
-/* ── Shared row layout ───────────────────────────────────────────────────── */
-
 .row {
   display: flex;
   align-items: center;
 }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
-
+/* ── Header ── */
 .hdr {
   height: 34px;
   border-bottom: 1px solid var(--table-border);
@@ -148,23 +320,18 @@ function fmtRate(v: number): string {
   color: var(--text-muted);
   user-select: none;
 }
-
 .hdr .sortable { cursor: pointer; }
 .hdr .sortable:hover { color: var(--text); }
 
-/* ── Data rows ───────────────────────────────────────────────────────────── */
-
+/* ── Data rows ── */
 .data-row {
   height: 40px;
   border-bottom: 1px solid var(--table-border);
   cursor: pointer;
 }
 .data-row:hover { background: var(--hover-row); }
-.data-row.healer { opacity: var(--healer-row-opacity); }
 
-/* ── Columns ─────────────────────────────────────────────────────────────── */
-
-/* Name — takes all remaining space */
+/* ── Columns ── */
 .col-name {
   flex: 1;
   min-width: 0;
@@ -181,7 +348,6 @@ function fmtRate(v: number): string {
   white-space: nowrap;
 }
 
-/* Active% and Casts — compact */
 .col-sm {
   width: 82px;
   flex-shrink: 0;
@@ -189,7 +355,6 @@ function fmtRate(v: number): string {
   text-align: right;
 }
 
-/* Stat value (Damage / Heal / Taken) */
 .col-val {
   width: 106px;
   flex-shrink: 0;
@@ -197,7 +362,6 @@ function fmtRate(v: number): string {
   text-align: right;
 }
 
-/* Bar — widest column, shows rank fill */
 .col-bar {
   width: 130px;
   flex-shrink: 0;
@@ -206,7 +370,6 @@ function fmtRate(v: number): string {
   align-items: center;
 }
 
-/* Rate (DPS / HPS / DTPS) */
 .col-rate {
   width: 90px;
   flex-shrink: 0;
@@ -214,23 +377,16 @@ function fmtRate(v: number): string {
   text-align: right;
 }
 
-/* Group separator — left border on first column of each stat group */
 .gs {
   border-left: 1px solid hsl(0, 0%, 13%);
-  padding-left: 10px;
 }
-
-/* ── Bar fill ────────────────────────────────────────────────────────────── */
 
 .bar-fill {
-  width: var(--pct, 0%);
   max-width: 100%;
   height: 13px;
-  background: var(--clr, rgba(255,255,255,0.1));
   border-radius: 1px;
+  flex-shrink: 0;
 }
-
-/* ── Text styles ─────────────────────────────────────────────────────────── */
 
 .num,
 .col-val span,

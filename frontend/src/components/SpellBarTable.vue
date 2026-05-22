@@ -1,30 +1,23 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, h } from 'vue'
+import {
+  createColumnHelper,
+  getCoreRowModel,
+  getSortedRowModel,
+  useVueTable,
+  FlexRender,
+} from '@tanstack/vue-table'
+import type { VisibilityState } from '@tanstack/vue-table'
 import type { SpellRow } from '../types/api'
+import { SPELL_SCHOOL_COLORS } from '../constants/bosses'
+import { useTablePresets } from '../composables/useTablePresets'
+import TableToolbar from './TableToolbar.vue'
+
 
 const props = defineProps<{
   spells: SpellRow[]
-  duration: number   // fight seconds for /s column; 0 = omit
+  duration: number
 }>()
-
-type SortKey = 'name' | 'casts' | 'hits' | 'crit_pct' | 'avg_hit' | 'avg_crit' | 'amount'
-
-const sortKey = ref<SortKey>('amount')
-const sortDir = ref<'asc' | 'desc'>('desc')
-
-function toggleSort(key: SortKey): void {
-  if (sortKey.value === key) {
-    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
-  } else {
-    sortKey.value = key
-    sortDir.value = 'desc'
-  }
-}
-
-function si(key: SortKey): string {
-  if (sortKey.value !== key) return ''
-  return sortDir.value === 'desc' ? ' ↓' : ' ↑'
-}
 
 function parseNum(s: string | undefined): number {
   if (!s) return 0
@@ -40,85 +33,200 @@ function fmtRate(actual: string): string {
 }
 
 function barColor(color: string): string {
-  if (!color) return 'rgba(163,53,238,0.45)'
-  return `color-mix(in srgb, ${color} 55%, transparent)`
+  const css = SPELL_SCHOOL_COLORS[color]
+  if (!css) return 'rgba(163,53,238,0.45)'
+  return `color-mix(in srgb, ${css} 55%, transparent)`
 }
 
-const sorted = computed<SpellRow[]>(() => {
-  const rows = [...props.spells]
-  const dir = sortDir.value === 'desc' ? -1 : 1
-  rows.sort((a, b) => {
-    switch (sortKey.value) {
-      case 'name':     return dir * a.name.localeCompare(b.name)
-      case 'casts':    return dir * (parseNum(a.casts) - parseNum(b.casts))
-      case 'hits':     return dir * (parseNum(a.hit_total) - parseNum(b.hit_total))
-      case 'crit_pct': return dir * (parseFloat(a.crit_pct ?? '0') - parseFloat(b.crit_pct ?? '0'))
-      case 'avg_hit':  return dir * (parseNum(a.avg_hit) - parseNum(b.avg_hit))
-      case 'avg_crit': return dir * (parseNum(a.avg_crit) - parseNum(b.avg_crit))
-      case 'amount':
-      default:         return dir * (a.percent - b.percent)
-    }
-  })
-  return rows
+// ── Column definitions ─────────────────────────────────────────────────
+const ch = createColumnHelper<SpellRow>()
+
+const columns = [
+  ch.display({
+    id: 'spell',
+    header: 'Spell',
+    enableSorting: false,
+    meta: { cls: 'col-name', noHide: true },
+    cell: ({ row }) => {
+      const item = row.original
+      const icon = item.icon
+        ? h('img', {
+            src: `/static/icons/${item.icon}.jpg`,
+            alt: item.name,
+            class: 'spell-icon',
+            width: 20,
+            height: 20,
+          })
+        : null
+      const nameEl = item.spell_id && !item.spell_id.includes('--')
+        ? h('a', {
+            href: `https://www.wowhead.com/wotlk/spell=${item.spell_id}`,
+            target: '_blank',
+            rel: 'noreferrer',
+            class: 'spell-link',
+            style: item.color ? { color: item.color } : undefined,
+          }, item.name)
+        : h('span', { style: item.color ? { color: item.color } : undefined }, item.name)
+      return h('div', { style: 'display:contents' }, [icon, nameEl].filter(Boolean))
+    },
+  }),
+  ch.accessor('casts', {
+    id: 'casts',
+    header: 'Casts',
+    meta: { cls: 'col-sm num' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.casts) - parseNum(b.original.casts),
+  }),
+  ch.accessor('hit_total', {
+    id: 'hits',
+    header: 'Hits',
+    meta: { cls: 'col-sm num' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.hit_total) - parseNum(b.original.hit_total),
+  }),
+  ch.accessor('crit_pct', {
+    id: 'crit_pct',
+    header: 'Crit%',
+    meta: { cls: 'col-sm num crit-pct' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseFloat(a.original.crit_pct ?? '0') - parseFloat(b.original.crit_pct ?? '0'),
+  }),
+  ch.accessor('avg_hit', {
+    id: 'avg_hit',
+    header: 'Avg',
+    meta: { cls: 'col-sm num' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.avg_hit) - parseNum(b.original.avg_hit),
+  }),
+  ch.accessor('avg_crit', {
+    id: 'avg_crit',
+    header: 'Avg↑',
+    meta: { cls: 'col-sm num crit-val' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.avg_crit) - parseNum(b.original.avg_crit),
+  }),
+  ch.accessor('misses', {
+    id: 'misses',
+    header: 'Misses',
+    meta: { cls: 'col-sm num' },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.misses) - parseNum(b.original.misses),
+  }),
+  ch.display({
+    id: 'bar',
+    header: '',
+    enableSorting: false,
+    meta: { cls: 'col-bar', noHide: true },
+    cell: ({ row }) => {
+      const item = row.original
+      return h('div', {
+        class: 'bar-fill',
+        style: { width: item.percent + '%', background: barColor(item.color) },
+      })
+    },
+  }),
+  ch.accessor('actual', {
+    id: 'total_dmg',
+    header: 'Total Dmg',
+    meta: { cls: 'col-val gs num', noHide: true },
+    cell: info => info.getValue() || '—',
+    sortingFn: (a, b) => parseNum(a.original.actual) - parseNum(b.original.actual),
+  }),
+  ch.display({
+    id: 'rate',
+    enableSorting: false,
+    header: () => props.duration ? '/s' : '',
+    meta: { cls: 'col-rate num', noHide: true },
+    cell: ({ row }) => fmtRate(row.original.actual),
+  }),
+]
+
+// ── Presets ────────────────────────────────────────────────────────────
+const PRESETS: Record<string, VisibilityState> = {
+  Default:        { misses: false },
+  Summary:        { casts: false, hits: false, crit_pct: false, avg_hit: false, avg_crit: false, misses: false },
+  'Hit Analysis': { casts: false, misses: false },
+}
+
+const {
+  columnVisibility, sorting, activePreset, importError,
+  applyPreset, exportPreset, importPreset,
+  onColumnVisibilityChange, onSortingChange,
+} = useTablePresets({
+  storageKey:     'uwu-spell-cols',
+  presets:        PRESETS,
+  defaultPreset:  'Default',
+  defaultSorting: [{ id: 'total_dmg', desc: true }],
 })
+
+const table = useVueTable({
+  get data() { return props.spells },
+  columns,
+  enableMultiSort: false,
+  state: {
+    get sorting()          { return sorting.value },
+    get columnVisibility() { return columnVisibility.value },
+  },
+  onSortingChange,
+  onColumnVisibilityChange,
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+})
+
+const hideableCols = computed(() =>
+  table.getAllLeafColumns().filter(c => !c.columnDef.meta?.noHide)
+)
 </script>
 
 <template>
   <div class="spell-bar-table">
 
-    <!-- Header -->
+    <TableToolbar
+      :presets="PRESETS"
+      :active-preset="String(activePreset ?? '')"
+      :hideable-cols="hideableCols"
+      :import-error="importError"
+      @apply-preset="applyPreset"
+      @export="exportPreset"
+      @import="importPreset"
+    />
+
+    <!-- Header row -->
     <div class="row hdr">
-      <div class="col-name sortable" @click="toggleSort('name')">Spell{{ si('name') }}</div>
-      <div class="col-sm  sortable" @click="toggleSort('casts')">Casts{{ si('casts') }}</div>
-      <div class="col-sm  sortable" @click="toggleSort('hits')">Hits{{ si('hits') }}</div>
-      <div class="col-sm  sortable" @click="toggleSort('crit_pct')">Crit%{{ si('crit_pct') }}</div>
-      <div class="col-sm  sortable" @click="toggleSort('avg_hit')">Avg{{ si('avg_hit') }}</div>
-      <div class="col-sm  sortable" @click="toggleSort('avg_crit')">Avg↑{{ si('avg_crit') }}</div>
-      <div class="col-val sortable gs" @click="toggleSort('amount')">Amount{{ si('amount') }}</div>
-      <div class="col-bar" />
-      <div class="col-rate">{{ duration ? '/s' : '' }}</div>
+      <template
+        v-for="header in (table.getHeaderGroups()[0]?.headers ?? [])"
+        :key="header.id"
+      >
+        <div
+          :class="[header.column.columnDef.meta?.cls, { sortable: header.column.getCanSort() }]"
+          @click="header.column.getToggleSortingHandler()?.($event)"
+        >
+          <FlexRender
+            v-if="!header.isPlaceholder"
+            :render="header.column.columnDef.header"
+            :props="header.getContext()"
+          />{{
+            header.column.getIsSorted() === 'desc' ? ' ↓'
+            : header.column.getIsSorted() === 'asc' ? ' ↑'
+            : ''
+          }}
+        </div>
+      </template>
     </div>
 
-    <!-- Rows -->
+    <!-- Data rows -->
     <div
-      v-for="item in sorted"
-      :key="item.spell_id"
+      v-for="row in table.getRowModel().rows"
+      :key="row.id"
       class="row data-row"
     >
-      <div class="col-name">
-        <img
-          v-if="item.icon"
-          :src="`/static/icons/${item.icon}.jpg`"
-          :alt="item.name"
-          class="spell-icon"
-          width="20"
-          height="20"
-        />
-        <a
-          v-if="item.spell_id && !item.spell_id.includes('--')"
-          :href="`https://www.wowhead.com/wotlk/spell=${item.spell_id}`"
-          target="_blank"
-          rel="noreferrer"
-          class="spell-link"
-          :style="{ color: item.color || undefined }"
-        >{{ item.name }}</a>
-        <span v-else :style="{ color: item.color || undefined }">{{ item.name }}</span>
-      </div>
-
-      <div class="col-sm num">{{ item.casts || '—' }}</div>
-      <div class="col-sm num">{{ item.hit_total || '—' }}</div>
-      <div class="col-sm num crit-pct">{{ item.crit_pct || '—' }}</div>
-      <div class="col-sm num">{{ item.avg_hit || '—' }}</div>
-      <div class="col-sm num crit-val">{{ item.avg_crit || '—' }}</div>
-
-      <div class="col-val gs num">{{ item.actual || '—' }}</div>
       <div
-        class="col-bar"
-        :style="{ '--pct': item.percent + '%', '--clr': barColor(item.color) }"
+        v-for="cell in row.getVisibleCells()"
+        :key="cell.id"
+        :class="[cell.column.columnDef.meta?.cls]"
       >
-        <div class="bar-fill" />
+        <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
       </div>
-      <div class="col-rate num">{{ fmtRate(item.actual) }}</div>
     </div>
 
   </div>
@@ -130,12 +238,12 @@ const sorted = computed<SpellRow[]>(() => {
   flex-direction: column;
 }
 
+/* ── Table rows ── */
 .row {
   display: flex;
   align-items: center;
 }
 
-/* ── Header ── */
 .hdr {
   height: 34px;
   border-bottom: 1px solid var(--table-border);
@@ -150,7 +258,6 @@ const sorted = computed<SpellRow[]>(() => {
 .hdr .sortable { cursor: pointer; }
 .hdr .sortable:hover { color: var(--text); }
 
-/* ── Data rows ── */
 .data-row {
   height: 40px;
   border-bottom: 1px solid var(--table-border);
@@ -197,6 +304,22 @@ const sorted = computed<SpellRow[]>(() => {
   text-align: right;
 }
 
+.col-bar {
+  width: 120px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  border-left: 1px solid hsl(0, 0%, 13%);
+}
+
+.bar-fill {
+  max-width: 100%;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 .col-val {
   width: 110px;
   flex-shrink: 0;
@@ -204,16 +327,8 @@ const sorted = computed<SpellRow[]>(() => {
   text-align: right;
 }
 
-.col-bar {
-  width: 130px;
-  flex-shrink: 0;
-  padding: 0 8px;
-  display: flex;
-  align-items: center;
-}
-
 .col-rate {
-  width: 80px;
+  width: 68px;
   flex-shrink: 0;
   padding: 0 10px;
   text-align: right;
@@ -222,15 +337,6 @@ const sorted = computed<SpellRow[]>(() => {
 /* Group separator */
 .gs {
   border-left: 1px solid hsl(0, 0%, 13%);
-}
-
-/* Bar fill */
-.bar-fill {
-  width: var(--pct, 0%);
-  max-width: 100%;
-  height: 13px;
-  background: var(--clr, rgba(163,53,238,0.45));
-  border-radius: 1px;
 }
 
 /* Numbers */

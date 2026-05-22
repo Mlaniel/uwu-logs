@@ -3,7 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
   Chart,
   LineController, LineElement, PointElement,
-  CategoryScale, LinearScale, Tooltip, Legend,
+  CategoryScale, LinearScale, Tooltip, Legend, Filler,
 } from 'chart.js'
 import type { Player, DamageGraphData, AllGraphData, RaidGraphData } from '../types/api'
 import type { PlayerView } from '../composables/useFilters'
@@ -12,7 +12,7 @@ import { useFetch } from '../composables/useFetch'
 
 Chart.register(
   LineController, LineElement, PointElement,
-  CategoryScale, LinearScale, Tooltip, Legend,
+  CategoryScale, LinearScale, Tooltip, Legend, Filler,
 )
 
 interface RangeSelection { startIdx: number; endIdx: number }
