@@ -119,6 +119,7 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
     <!-- Main content -->
     <main class="main-content">
       <header class="player-header">
+        <router-link :to="{ path: `/reports/${reportId}`, query: bossQuery }" class="back-link">← {{ reportTitle || 'Raid' }}</router-link>
         <h1 class="player-title">{{ title }}</h1>
         <div class="tab-bar">
           <button :class="{ active: activeView === 'damage' }" @click="setView('damage')">Damage done</button>
@@ -167,6 +168,20 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--table-border);
+}
+
+.back-link {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--text);
 }
 
 .player-title {

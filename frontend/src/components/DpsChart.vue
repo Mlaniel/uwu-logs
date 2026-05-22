@@ -311,24 +311,33 @@ function makeMarkerPlugin() {
         ctx.stroke()
         ctx.setLineDash([])
 
-        // Green upward triangle at top
-        const ty = chartArea.top + 7
+        // Green upward triangle at bottom
+        const by = chartArea.bottom - 4
         ctx.fillStyle = 'rgba(72,187,120,0.92)'
         ctx.beginPath()
-        ctx.moveTo(x,     ty + 9)
-        ctx.lineTo(x - 5, ty)
-        ctx.lineTo(x + 5, ty)
+        ctx.moveTo(x,     by - 10)
+        ctx.lineTo(x - 5, by)
+        ctx.lineTo(x + 5, by)
         ctx.closePath()
         ctx.fill()
 
         markerHits.push({
           x,
           lines: [
-            `+ ${mark.target}`,
+            `↑ ${mark.target}`,
             `${mark.caster} — ${mark.spell}`,
           ],
         })
       }
+
+      // Merge tooltip hits that share the same x pixel (death + rez at same second)
+      const merged: typeof markerHits = []
+      for (const hit of markerHits) {
+        const existing = merged.find(h => Math.abs(h.x - hit.x) < 2)
+        if (existing) existing.lines.push(...hit.lines)
+        else merged.push({ x: hit.x, lines: [...hit.lines] })
+      }
+      markerHits = merged
 
       ctx.restore()
     },
