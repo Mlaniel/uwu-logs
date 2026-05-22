@@ -5,7 +5,7 @@ import {
   LineController, LineElement, PointElement,
   CategoryScale, LinearScale, Tooltip, Legend, Filler,
 } from 'chart.js'
-import type { Player, DamageGraphData, AllGraphData, RaidGraphData } from '../types/api'
+import type { Player, DamageGraphData, AllGraphData, RaidGraphData, DeathApiResponse } from '../types/api'
 import type { PlayerView } from '../composables/useFilters'
 import { CLASS_COLORS } from '../constants/bosses'
 import { useFetch } from '../composables/useFetch'
@@ -45,6 +45,9 @@ const { data: takenData, execute: fetchTaken } = useFetch<DamageGraphData>()
 
 // Full-raid line chart data — fetched once when no boss is selected
 const { data: raidData, execute: fetchRaid } = useFetch<RaidGraphData>()
+
+// Death/revive data — fetched alongside graph data in boss mode
+const { data: deathData, execute: fetchDeaths } = useFetch<DeathApiResponse>()
 
 // Graph data for the currently active chart view
 const graphData = computed<DamageGraphData | null>(() =>
@@ -149,6 +152,164 @@ function togglePlayer(name: string) {
   else next.add(name)
   hiddenPlayers.value = next
   rebuildChart()
+}
+
+// ── Death / revive markers ─────────────────────────────────────────────────
+
+interface DeathMark {
+  sec: number        // seconds from fight start
+  player: string
+  classSlug: string  // CSS class e.g. "death-knight"
+  cause: string      // "Source — Spell"
+  amount: string     // killing blow formatted
+}
+
+interface ReviveMark {
+  sec: number
+  target: string     // revived player
+  caster: string     // who cast the rez
+  spell: string
+}
+
+const deathMarks = computed<DeathMark[]>(() => {
+  if (!deathData.value || !isLineMode.value) return []
+  return Object.entries(deathData.value.DEATHS)
+    .filter(([, entry]) => {
+      const first = entry.death[0]
+      return first && String(first[1]) !== 'RESURRECT'
+    })
+    .map(([key, entry]) => {
+      const sec = Math.round(parseFloat(key))
+      const guid = deathData.value!.PLAYERS[entry.player]
+      const cls  = guid ? (deathData.value!.CLASSES[guid] ?? '') : ''
+      const kb   = entry.death[1]
+      let cause = '', amount = ''
+      if (kb && String(kb[1]) === 'DAMAGE') {
+        const src   = String(kb[3] ?? '')
+        const spell = String(kb[5] ?? '')
+        cause = (src && src !== entry.player) ? `${src} — ${spell}` : spell
+        const v = kb[6]
+        if (v != null && v !== '' && v !== 0)
+          amount = Number(v).toLocaleString('en-US')
+      }
+      return {
+        sec,
+        player:    entry.player,
+        classSlug: cls.toLowerCase().replace(/\s+/g, '-'),
+        cause,
+        amount,
+      }
+    })
+})
+
+const reviveMarks = computed<ReviveMark[]>(() => {
+  if (!deathData.value || !isLineMode.value) return []
+  return Object.entries(deathData.value.DEATHS)
+    .filter(([, entry]) => {
+      const first = entry.death[0]
+      return first && String(first[1]) === 'RESURRECT'
+    })
+    .map(([key, entry]) => {
+      const sec  = Math.round(parseFloat(key))
+      const line = entry.death[0]
+      return {
+        sec,
+        target: entry.player,
+        caster: String(line[3] ?? ''),
+        spell:  String(line[5] ?? ''),
+      }
+    })
+})
+
+// Tooltip shown on hover near a marker
+interface MarkerTooltip { x: number; y: number; lines: string[] }
+const markerTooltip = ref<MarkerTooltip | null>(null)
+
+// Hit-test rects populated by the canvas plugin each draw cycle
+let markerHits: Array<{ x: number; lines: string[] }> = []
+
+function onTooltipMove(e: MouseEvent): void {
+  if (!isLineMode.value || !chartInstance) { markerTooltip.value = null; return }
+  const rect = chartWrap.value!.getBoundingClientRect()
+  const mx   = e.clientX - rect.left
+  const my   = e.clientY - rect.top
+  for (const h of markerHits) {
+    if (Math.abs(mx - h.x) <= 9) {
+      markerTooltip.value = { x: h.x, y: my, lines: h.lines }
+      return
+    }
+  }
+  markerTooltip.value = null
+}
+
+function onTooltipLeave(): void {
+  markerTooltip.value = null
+}
+
+function makeMarkerPlugin() {
+  return {
+    id: 'deathRevive',
+    afterDraw(chart: Chart) {
+      const { ctx, scales, chartArea } = chart as any
+      const xScale = scales.x
+      const start  = localRange.value?.startIdx ?? 0
+      markerHits   = []
+      ctx.save()
+
+      for (const mark of deathMarks.value) {
+        const idx = mark.sec - start
+        const x   = xScale.getPixelForValue(idx)
+        if (x < chartArea.left - 6 || x > chartArea.right + 6) continue
+
+        // Dashed red vertical line
+        ctx.strokeStyle = 'rgba(220,55,55,0.5)'
+        ctx.lineWidth   = 1
+        ctx.setLineDash([2, 4])
+        ctx.beginPath()
+        ctx.moveTo(x, chartArea.top)
+        ctx.lineTo(x, chartArea.bottom)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // Red circle at top
+        ctx.fillStyle = 'rgba(220,55,55,0.92)'
+        ctx.beginPath()
+        ctx.arc(x, chartArea.top + 7, 4.5, 0, Math.PI * 2)
+        ctx.fill()
+
+        const lines = [`☠ ${mark.player}`]
+        if (mark.cause)  lines.push(mark.cause)
+        if (mark.amount) lines.push(`${mark.amount} dmg`)
+        markerHits.push({ x, lines })
+      }
+
+      for (const mark of reviveMarks.value) {
+        const idx = mark.sec - start
+        const x   = xScale.getPixelForValue(idx)
+        if (x < chartArea.left - 6 || x > chartArea.right + 6) continue
+
+        // Green upward triangle at bottom
+        const by = chartArea.bottom - 4
+        ctx.fillStyle = 'rgba(72,187,120,0.92)'
+        ctx.beginPath()
+        ctx.moveTo(x,     by - 11)
+        ctx.lineTo(x - 5, by)
+        ctx.lineTo(x + 5, by)
+        ctx.closePath()
+        ctx.fill()
+
+        markerHits.push({
+          x,
+          lines: [
+            `+ ${mark.target}`,
+            `${mark.caster} — ${mark.spell}`,
+          ],
+        })
+      }
+
+      ctx.restore()
+    },
+  }
 }
 
 // ── Data builders ──────────────────────────────────────────────────────────
@@ -305,6 +466,7 @@ function rebuildChart() {
     chartInstance = new Chart(canvas.value, {
       type: 'line',
       data: { labels: sd.labels, datasets: sd.datasets },
+      plugins: [makeMarkerPlugin()],
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -484,6 +646,7 @@ watch(bossParam, (boss) => {
     fetchDmg(`${base}&view=damage`),
     fetchHeal(`${base}&view=heal`),
     fetchTaken(`${base}&view=taken`),
+    fetchDeaths(`/api/v2/reports/${props.reportId}/deaths/${props.selectedHref}`),
   ]).then(() => {
     graphLoading.value = false
     emit('graph-data', { damage: dmgData.value, heal: healData.value, taken: takenData.value })
@@ -491,7 +654,7 @@ watch(bossParam, (boss) => {
 }, { immediate: true })
 
 watch(
-  [isLineMode, graphData, raidData, () => props.players, () => props.view, () => props.raidFilter],
+  [isLineMode, graphData, raidData, () => props.players, () => props.view, () => props.raidFilter, deathMarks, reviveMarks],
   rebuildChart,
   { deep: false },
 )
@@ -523,9 +686,18 @@ onUnmounted(() => {
       class="chart-wrap"
       :class="{ selectable: isLineMode }"
       @mousedown="onWrapMouseDown"
+      @mousemove="onTooltipMove"
+      @mouseleave="onTooltipLeave"
     >
       <canvas ref="canvas" />
       <div v-if="overlayStyle" class="select-overlay" :style="overlayStyle" />
+      <div
+        v-if="markerTooltip && isLineMode"
+        class="marker-tooltip"
+        :style="{ left: markerTooltip.x + 'px', top: (markerTooltip.y - 10) + 'px' }"
+      >
+        <div v-for="line in markerTooltip.lines" :key="line" class="tt-line">{{ line }}</div>
+      </div>
     </div>
     <div v-if="!collapsed && stackLegend.length" class="stack-legend">
       <button
@@ -648,4 +820,21 @@ onUnmounted(() => {
   border-radius: 1px;
   flex-shrink: 0;
 }
+
+/* ── Death / revive tooltip ── */
+.marker-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  background: hsl(0, 0%, 10%);
+  border: 1px solid hsl(0, 0%, 20%);
+  border-radius: 4px;
+  padding: 5px 8px;
+  white-space: nowrap;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  line-height: 1.55;
+  z-index: 10;
+}
+.tt-line:first-child { font-weight: 600; }
 </style>

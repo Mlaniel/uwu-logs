@@ -219,7 +219,6 @@ const displayPlayers = computed<Player[]>(() => {
       />
       <nav class="sidebar-nav">
         <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/deaths`, query: bossQuery }" class="sidebar-nav-link">Deaths</router-link>
         <router-link :to="{ path: `/reports/${reportId}/timeline`, query: bossQuery }" class="sidebar-nav-link">Timeline</router-link>
         <router-link :to="{ path: `/reports/${reportId}/compare`, query: bossQuery }" class="sidebar-nav-link">Compare</router-link>
       </nav>
