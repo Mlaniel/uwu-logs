@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useFetch } from '../composables/useFetch'
-import type { LogsApiResponse } from '../types/api'
+import type { LogsApiResponse, LogEntry } from '../types/api'
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -101,6 +101,41 @@ watch([year, month], () => {
 
 fetch()
 
+// ── Sorting ───────────────────────────────────────────────────────────────────
+
+type SortKey = keyof LogEntry | 'date'
+const sortKey = ref<SortKey>('date')
+const sortDir = ref<1 | -1>(-1)   // -1 = desc (newest first by default)
+
+function toggleSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 1 ? -1 : 1
+  } else {
+    sortKey.value = key
+    sortDir.value = key === 'date' || key === 'duration' ? -1 : 1
+  }
+}
+
+const sortedResults = computed(() => {
+  const list = [...results.value]
+  const key  = sortKey.value
+  const dir  = sortDir.value
+  list.sort((a, b) => {
+    let av: string | number = (a as Record<string, unknown>)[key] as string | number ?? ''
+    let bv: string | number = (b as Record<string, unknown>)[key] as string | number ?? ''
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+    return String(av).localeCompare(String(bv)) * dir
+  })
+  return list
+})
+
+function fmtDuration(sec: number): string {
+  if (!sec) return '—'
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return h ? `${h}h ${m}m` : `${m}m`
+}
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 function go(id: string) {
@@ -181,17 +216,32 @@ function go(id: string) {
         <table class="logs-table">
           <thead>
             <tr>
-              <th class="col-date">Date</th>
-              <th>Author</th>
-              <th>Server</th>
-              <th>Realm</th>
-              <th class="col-bosses">Bosses</th>
-              <th>Latest boss</th>
+              <th class="col-date sortable" :class="{ sorted: sortKey === 'date' }" @click="toggleSort('date')">
+                Date <span class="sort-icon">{{ sortKey === 'date' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
+              <th class="sortable" :class="{ sorted: sortKey === 'name' }" @click="toggleSort('name')">
+                Author <span class="sort-icon">{{ sortKey === 'name' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
+              <th class="sortable" :class="{ sorted: sortKey === 'server' }" @click="toggleSort('server')">
+                Server <span class="sort-icon">{{ sortKey === 'server' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
+              <th class="sortable" :class="{ sorted: sortKey === 'realm' }" @click="toggleSort('realm')">
+                Realm <span class="sort-icon">{{ sortKey === 'realm' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
+              <th class="col-bosses sortable" :class="{ sorted: sortKey === 'boss_count' }" @click="toggleSort('boss_count')">
+                Bosses <span class="sort-icon">{{ sortKey === 'boss_count' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
+              <th class="sortable" :class="{ sorted: sortKey === 'latest_boss' }" @click="toggleSort('latest_boss')">
+                Latest boss <span class="sort-icon">{{ sortKey === 'latest_boss' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
+              <th class="col-duration sortable" :class="{ sorted: sortKey === 'duration' }" @click="toggleSort('duration')">
+                Duration <span class="sort-icon">{{ sortKey === 'duration' ? (sortDir === 1 ? '↑' : '↓') : '↕' }}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="r in results"
+              v-for="r in sortedResults"
               :key="r.id"
               class="logs-row"
               @click="go(r.id)"
@@ -202,6 +252,7 @@ function go(id: string) {
               <td class="col-server">{{ r.realm }}</td>
               <td class="col-bosses">{{ r.boss_count }}</td>
               <td class="col-latest">{{ r.latest_boss }}</td>
+              <td class="col-duration">{{ fmtDuration(r.duration) }}</td>
             </tr>
           </tbody>
         </table>
@@ -360,6 +411,30 @@ function go(id: string) {
   text-align: left;
   padding: 0 8px 6px;
   border-bottom: 1px solid var(--table-border);
+  white-space: nowrap;
+}
+
+.logs-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.logs-table th.sortable:hover {
+  color: var(--text);
+}
+
+.logs-table th.sorted {
+  color: var(--text);
+}
+
+.sort-icon {
+  font-size: 0.6rem;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+
+th.sorted .sort-icon {
+  opacity: 1;
 }
 
 .logs-row {
@@ -389,4 +464,14 @@ function go(id: string) {
 }
 
 .col-latest { color: var(--text-muted); }
+
+.col-duration {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-right: 4px !important;
+  white-space: nowrap;
+  width: 72px;
+  color: var(--text-muted);
+}
 </style>

@@ -161,15 +161,27 @@ def convert_timezone(report_id):
         "time": dt.strftime("%H:%M"),
     }
 
+def _report_duration_seconds(report_id: str) -> int:
+    """Read raid duration in seconds from the pre-computed TIMESTAMP_DATA.json.
+    Each entry represents one second of the raid, so len() == duration.
+    Returns 0 if the file is missing or unreadable."""
+    try:
+        ts_file = Directories.logs / report_id / "TIMESTAMP_DATA.json"
+        data = ts_file.json()
+        return len(data)
+    except Exception:
+        return 0
+
 def report_data(report_id: str):
     report = logs_main.THE_LOGS(report_id)
     date = convert_timezone(report_id)
     report_name_info = get_report_name_info(report_id)
     return date | {
-        "author": report_name_info["author"],
-        "server": report_name_info["server"],
-        "player": tuple(report.get_players_guids().values()),
-        "fight": tuple(report.get_enc_data()),
+        "author":   report_name_info["author"],
+        "server":   report_name_info["server"],
+        "player":   tuple(report.get_players_guids().values()),
+        "fight":    tuple(report.get_enc_data()),
+        "duration": _report_duration_seconds(report_id),
     }
 
 def make_new(report_ids: list[str]):

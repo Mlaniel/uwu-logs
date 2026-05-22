@@ -82,8 +82,9 @@ export interface RecentReport {
 }
 
 export interface LogEntry extends RecentReport {
-  realm: string   // specific realm (Icecrown, Lordaeron…)
-  server: string  // provider (Warmane, WoW Circle…)
+  realm: string     // specific realm (Icecrown, Lordaeron…)
+  server: string    // provider (Warmane, WoW Circle…)
+  duration: number  // total raid duration in seconds
 }
 
 export interface LogsApiResponse {

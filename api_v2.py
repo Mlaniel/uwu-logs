@@ -249,6 +249,7 @@ def logs():
             month_val = int(row.get("month", 0))
             day_val   = int(row.get("day",   0))
             date_str  = f"20{year_val:02d}-{month_val:02d}-{day_val:02d}" if year_val else ""
+            dur_sec = int(row.get("duration") or 0)
             results.append({
                 "id":          report_id,
                 "name":        row.get("author", report_id),
@@ -257,6 +258,7 @@ def logs():
                 "boss_count":  len(fights),
                 "latest_boss": fights[-1] if fights else "",
                 "date":        date_str,
+                "duration":    dur_sec,
             })
 
     return jsonify({"results": results, "total": total, "servers": servers_map})
