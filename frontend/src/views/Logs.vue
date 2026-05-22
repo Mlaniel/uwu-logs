@@ -9,7 +9,7 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-const currentYear  = new Date().getFullYear()
+const currentYear = new Date().getFullYear()
 const YEARS = Array.from({ length: currentYear - 2021 }, (_, i) => currentYear - i)
 
 const router = useRouter()
@@ -19,15 +19,31 @@ const route  = useRoute()
 
 const q      = ref((route.query.q      as string) ?? '')
 const server = ref((route.query.server as string) ?? '')
-const year   = ref(route.query.year   ? Number(route.query.year)  : 0)
-const month  = ref(route.query.month  ? Number(route.query.month) : 0)
+const realm  = ref((route.query.realm  as string) ?? '')
+const year   = ref(route.query.year  ? Number(route.query.year)  : 0)
+const month  = ref(route.query.month ? Number(route.query.month) : 0)
 
 // ── Fetch ──────────────────────────────────────────────────────────────────────
 
 const { data, loading, error, execute } = useFetch<LogsApiResponse>()
 
-const results = computed(() => data.value?.results ?? [])
-const servers = computed(() => data.value?.servers ?? [])
+const results   = computed(() => data.value?.results ?? [])
+const serversMap = computed(() => data.value?.servers ?? {})
+
+const serverNames = computed(() => Object.keys(serversMap.value).sort())
+const realmNames  = computed<string[]>(() => {
+  if (!server.value) return []
+  return serversMap.value[server.value] ?? []
+})
+
+// When the server changes, clear realm if it no longer belongs to the new server
+watch(server, () => {
+  if (realm.value && !realmNames.value.includes(realm.value)) {
+    realm.value = ''
+  }
+})
+
+// ── Fetch logic ────────────────────────────────────────────────────────────────
 
 let debounceTimer = 0
 
@@ -35,6 +51,7 @@ function fetch() {
   const params = new URLSearchParams()
   if (q.value)      params.set('q',      q.value)
   if (server.value) params.set('server', server.value)
+  if (realm.value)  params.set('realm',  realm.value)
   if (year.value)   params.set('year',   String(year.value))
   if (month.value)  params.set('month',  String(month.value))
 
@@ -54,14 +71,14 @@ function onSelectChange() {
 function clearFilters() {
   q.value      = ''
   server.value = ''
+  realm.value  = ''
   year.value   = 0
   month.value  = 0
   fetch()
 }
 
-watch(() => route.query, () => {}, { immediate: false })
+const hasFilters = computed(() => !!(q.value || server.value || realm.value || year.value || month.value))
 
-// Initial load
 fetch()
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -90,7 +107,17 @@ function go(id: string) {
 
         <select v-model="server" class="filter-select" @change="onSelectChange">
           <option value="">All servers</option>
-          <option v-for="s in servers" :key="s" :value="s">{{ s }}</option>
+          <option v-for="s in serverNames" :key="s" :value="s">{{ s }}</option>
+        </select>
+
+        <select
+          v-model="realm"
+          class="filter-select"
+          :disabled="!server"
+          @change="onSelectChange"
+        >
+          <option value="">All realms</option>
+          <option v-for="r in realmNames" :key="r" :value="r">{{ r }}</option>
         </select>
 
         <select v-model="year" class="filter-select filter-select--narrow" @change="onSelectChange">
@@ -103,11 +130,7 @@ function go(id: string) {
           <option v-for="(name, i) in MONTHS" :key="i" :value="i + 1">{{ name }}</option>
         </select>
 
-        <button
-          v-if="q || server || year || month"
-          class="clear-btn"
-          @click="clearFilters"
-        >Clear</button>
+        <button v-if="hasFilters" class="clear-btn" @click="clearFilters">Clear</button>
       </div>
 
       <!-- Results -->
@@ -119,35 +142,39 @@ function go(id: string) {
 
       <p v-else-if="!results.length" class="state-msg">No logs found.</p>
 
-      <table v-else class="logs-table">
-        <thead>
-          <tr>
-            <th class="col-date">Date</th>
-            <th>Author</th>
-            <th>Server</th>
-            <th class="col-bosses">Bosses</th>
-            <th>Latest boss</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="r in results"
-            :key="r.id"
-            class="logs-row"
-            @click="go(r.id)"
-          >
-            <td class="col-date">{{ r.date }}</td>
-            <td>{{ r.name }}</td>
-            <td class="col-server">{{ r.server }}</td>
-            <td class="col-bosses">{{ r.boss_count }}</td>
-            <td class="col-latest">{{ r.latest_boss }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-else>
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th class="col-date">Date</th>
+              <th>Author</th>
+              <th>Server</th>
+              <th>Realm</th>
+              <th class="col-bosses">Bosses</th>
+              <th>Latest boss</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="r in results"
+              :key="r.id"
+              class="logs-row"
+              @click="go(r.id)"
+            >
+              <td class="col-date">{{ r.date }}</td>
+              <td>{{ r.name }}</td>
+              <td class="col-server">{{ r.server }}</td>
+              <td class="col-server">{{ r.realm }}</td>
+              <td class="col-bosses">{{ r.boss_count }}</td>
+              <td class="col-latest">{{ r.latest_boss }}</td>
+            </tr>
+          </tbody>
+        </table>
 
-      <p v-if="results.length === 200" class="result-cap">
-        Showing first 200 results — refine your search to see more.
-      </p>
+        <p v-if="results.length === 200" class="result-cap">
+          Showing first 200 results — refine your search to see more.
+        </p>
+      </template>
     </div>
   </div>
 </template>
@@ -162,7 +189,7 @@ function go(id: string) {
 
 .logs-inner {
   width: 100%;
-  max-width: 900px;
+  max-width: 960px;
 }
 
 .page-title {
@@ -185,7 +212,7 @@ function go(id: string) {
 }
 
 .filter-search {
-  flex: 1 1 240px;
+  flex: 1 1 220px;
 }
 
 .search-input {
@@ -200,13 +227,8 @@ function go(id: string) {
   box-sizing: border-box;
 }
 
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.search-input:focus {
-  border-color: var(--primary);
-}
+.search-input::placeholder { color: var(--text-muted); }
+.search-input:focus         { border-color: var(--primary); }
 
 .filter-select {
   background: var(--surface);
@@ -220,13 +242,13 @@ function go(id: string) {
   min-width: 120px;
 }
 
-.filter-select--narrow {
-  min-width: 80px;
+.filter-select:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
-.filter-select:focus {
-  border-color: var(--primary);
-}
+.filter-select--narrow { min-width: 80px; }
+.filter-select:focus   { border-color: var(--primary); }
 
 .clear-btn {
   background: transparent;
@@ -265,17 +287,8 @@ function go(id: string) {
 }
 
 /* ── State messages ─────────────────────────────────────────── */
-.state-msg {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  margin: 1rem 0 0;
-}
-
-.result-cap {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  margin-top: 0.75rem;
-}
+.state-msg  { color: var(--text-muted); font-size: 0.875rem; margin: 1rem 0 0; }
+.result-cap { color: var(--text-muted); font-size: 0.75rem;  margin-top: 0.75rem; }
 
 /* ── Table ──────────────────────────────────────────────────── */
 .logs-table {
@@ -302,13 +315,8 @@ function go(id: string) {
   border-bottom: 1px solid var(--table-border);
 }
 
-.logs-row:hover {
-  background: var(--hover-row);
-}
-
-.logs-row td {
-  padding: 0 8px;
-}
+.logs-row:hover { background: var(--hover-row); }
+.logs-row td    { padding: 0 8px; }
 
 .col-date {
   color: var(--text-muted);
@@ -317,9 +325,7 @@ function go(id: string) {
   width: 96px;
 }
 
-.col-server {
-  color: var(--text-muted);
-}
+.col-server { color: var(--text-muted); }
 
 .col-bosses {
   font-family: 'Barlow Condensed', sans-serif;
@@ -329,7 +335,5 @@ function go(id: string) {
   width: 64px;
 }
 
-.col-latest {
-  color: var(--text-muted);
-}
+.col-latest { color: var(--text-muted); }
 </style>

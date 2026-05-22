@@ -81,9 +81,14 @@ export interface RecentReport {
   date: string
 }
 
+export interface LogEntry extends RecentReport {
+  realm: string   // specific realm (Icecrown, Lordaeron…)
+  server: string  // provider (Warmane, WoW Circle…)
+}
+
 export interface LogsApiResponse {
-  results: RecentReport[]
-  servers: string[]
+  results: LogEntry[]
+  servers: Record<string, string[]>   // provider → [realms]
 }
 
 // ── Phase 1b types ──────────────────────────────────────────────────────────

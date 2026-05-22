@@ -16,6 +16,33 @@ apiv2_bp = Blueprint("apiv2", __name__, url_prefix="/api/v2")
 
 RECENT_REPORTS_LIMIT = 20
 
+# Realm (stored in DF "server" column) → provider server name
+REALM_TO_SERVER: dict[str, str] = {
+    "Icecrown":             "Warmane",
+    "Lordaeron":            "Warmane",
+    "Onyxia":               "Warmane",
+    "Frostmourne3":         "Warmane",
+    "Frostmourne2":         "Warmane",
+    "Whitemane-Frostmourne": "Whitemane",
+    "Stormforge":           "Stormforge",
+    "Rising-Gods":          "Rising Gods",
+    "ChromieCraft":         "ChromieCraft",
+    "EzWoW":                "EzWoW",
+    "FreedomUA":            "FreedomUA",
+    "UltimoWoW":            "UltimoWoW",
+    "Way-of-Elendil":       "Way of Elendil",
+    "WoW-Brasil":           "WoW Brasil",
+    "WoW-Mania":            "WoW Mania",
+    "WoW-Circle-x1":        "WoW Circle",
+    "WoW-Circle-x4":        "WoW Circle",
+    "WoW-Circle-x5":        "WoW Circle",
+    "WoW-Circle-x100":      "WoW Circle",
+    "WoW-Circle":           "WoW Circle",
+}
+
+def _realm_to_server(realm: str) -> str:
+    return REALM_TO_SERVER.get(realm, realm)
+
 
 # ─── Serialization helpers ────────────────────────────────────────────────────
 
@@ -165,21 +192,32 @@ def recent_reports():
 def logs():
     df = logs_calendar.read_main_df()
 
-    servers: list[str] = []
+    # Build server→[realm] map from the full unfiltered DF for the dropdowns
+    servers_map: dict[str, list[str]] = {}
     if not df.empty and "server" in df.columns:
-        servers = sorted(df["server"].dropna().unique().tolist())
+        for realm in sorted(df["server"].dropna().unique().tolist()):
+            srv = _realm_to_server(realm)
+            servers_map.setdefault(srv, []).append(realm)
+        for realms in servers_map.values():
+            realms.sort()
 
     results = []
     if not df.empty:
         q      = request.args.get("q",      "").strip().lower()
-        server = request.args.get("server", "").strip()
+        server = request.args.get("server", "").strip()   # provider (Warmane, …)
+        realm  = request.args.get("realm",  "").strip()   # specific realm (Icecrown, …)
         year   = request.args.get("year",   type=int)
         month  = request.args.get("month",  type=int)
 
-        if server and "server" in df.columns:
-            df = df[df["server"] == server]
-        if year and "year" in df.columns:
-            df = df[df["year"] == year % 100]
+        if "server" in df.columns:
+            if realm:
+                df = df[df["server"] == realm]
+            elif server:
+                # keep rows whose realm maps to the requested server provider
+                mask = df["server"].apply(lambda r: _realm_to_server(r) == server)
+                df = df[mask]
+        if year  and "year"  in df.columns:
+            df = df[df["year"]  == year % 100]
         if month and "month" in df.columns:
             df = df[df["month"] == month]
         if q:
@@ -190,8 +228,7 @@ def logs():
                     if q in p.lower():
                         return True
                 return False
-            mask = df.apply(_matches, axis=1)
-            df = df[mask]
+            df = df[df.apply(_matches, axis=1)]
 
         sort_cols = [c for c in ("year", "month", "day", "time") if c in df.columns]
         if sort_cols:
@@ -199,6 +236,7 @@ def logs():
 
         for report_id, row in df.head(200).iterrows():
             fights    = row.get("fight", ()) or ()
+            realm_val = row.get("server", "")
             year_val  = int(row.get("year",  0))
             month_val = int(row.get("month", 0))
             day_val   = int(row.get("day",   0))
@@ -206,13 +244,14 @@ def logs():
             results.append({
                 "id":          report_id,
                 "name":        row.get("author", report_id),
-                "server":      row.get("server", ""),
+                "server":      _realm_to_server(realm_val),
+                "realm":       realm_val,
                 "boss_count":  len(fights),
                 "latest_boss": fights[-1] if fights else "",
                 "date":        date_str,
             })
 
-    return jsonify({"results": results, "servers": servers})
+    return jsonify({"results": results, "servers": servers_map})
 
 
 # ─── GET /api/v2/reports/<id>/player/<name>/ ─────────────────────────────────
