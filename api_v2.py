@@ -201,31 +201,38 @@ def logs():
         for realms in servers_map.values():
             realms.sort()
 
-    results = []
+    results: list[dict] = []
+    total = 0
+
     if not df.empty:
         q      = request.args.get("q",      "").strip().lower()
-        server = request.args.get("server", "").strip()   # provider (Warmane, …)
-        realm  = request.args.get("realm",  "").strip()   # specific realm (Icecrown, …)
+        server = request.args.get("server", "").strip()
+        realm  = request.args.get("realm",  "").strip()
         year   = request.args.get("year",   type=int)
         month  = request.args.get("month",  type=int)
+        day    = request.args.get("day",    type=int)
 
         if "server" in df.columns:
             if realm:
                 df = df[df["server"] == realm]
             elif server:
-                # keep rows whose realm maps to the requested server provider
                 mask = df["server"].apply(lambda r: _realm_to_server(r) == server)
                 df = df[mask]
         if year  and "year"  in df.columns:
             df = df[df["year"]  == year % 100]
         if month and "month" in df.columns:
             df = df[df["month"] == month]
+        if day   and "day"   in df.columns:
+            df = df[df["day"]   == day]
         if q:
             def _matches(row):
                 if q in str(row.get("author", "")).lower():
                     return True
                 for p in (row.get("player") or ()):
                     if q in p.lower():
+                        return True
+                for f in (row.get("fight") or ()):
+                    if q in f.lower():
                         return True
                 return False
             df = df[df.apply(_matches, axis=1)]
@@ -234,6 +241,7 @@ def logs():
         if sort_cols:
             df = df.sort_values(by=sort_cols, ascending=False)
 
+        total = len(df)
         for report_id, row in df.head(200).iterrows():
             fights    = row.get("fight", ()) or ()
             realm_val = row.get("server", "")
@@ -251,7 +259,7 @@ def logs():
                 "date":        date_str,
             })
 
-    return jsonify({"results": results, "servers": servers_map})
+    return jsonify({"results": results, "total": total, "servers": servers_map})
 
 
 # ─── GET /api/v2/reports/<id>/player/<name>/ ─────────────────────────────────

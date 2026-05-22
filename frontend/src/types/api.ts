@@ -88,6 +88,7 @@ export interface LogEntry extends RecentReport {
 
 export interface LogsApiResponse {
   results: LogEntry[]
+  total: number                       // count before the 200-row cap
   servers: Record<string, string[]>   // provider → [realms]
 }
 

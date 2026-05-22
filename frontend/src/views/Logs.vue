@@ -22,12 +22,14 @@ const server = ref((route.query.server as string) ?? '')
 const realm  = ref((route.query.realm  as string) ?? '')
 const year   = ref(route.query.year  ? Number(route.query.year)  : 0)
 const month  = ref(route.query.month ? Number(route.query.month) : 0)
+const day    = ref(route.query.day   ? Number(route.query.day)   : 0)
 
 // ── Fetch ──────────────────────────────────────────────────────────────────────
 
 const { data, loading, error, execute } = useFetch<LogsApiResponse>()
 
-const results   = computed(() => data.value?.results ?? [])
+const results    = computed(() => data.value?.results ?? [])
+const total      = computed(() => data.value?.total ?? 0)
 const serversMap = computed(() => data.value?.servers ?? {})
 
 const serverNames = computed(() => Object.keys(serversMap.value).sort())
@@ -54,6 +56,7 @@ function fetch() {
   if (realm.value)  params.set('realm',  realm.value)
   if (year.value)   params.set('year',   String(year.value))
   if (month.value)  params.set('month',  String(month.value))
+  if (day.value)    params.set('day',    String(day.value))
 
   router.replace({ query: Object.fromEntries(params) })
   execute(`/api/v2/logs/?${params}`)
@@ -74,10 +77,27 @@ function clearFilters() {
   realm.value  = ''
   year.value   = 0
   month.value  = 0
+  day.value    = 0
   fetch()
 }
 
-const hasFilters = computed(() => !!(q.value || server.value || realm.value || year.value || month.value))
+const hasFilters = computed(() => !!(q.value || server.value || realm.value || year.value || month.value || day.value))
+
+// Days available: constrain to the real month length when year+month are both set
+const dayOptions = computed<number[]>(() => {
+  if (year.value && month.value) {
+    const daysInMonth = new Date(year.value, month.value, 0).getDate()
+    return Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  }
+  return Array.from({ length: 31 }, (_, i) => i + 1)
+})
+
+// When month or year changes, clear day if it's out of range
+watch([year, month], () => {
+  if (day.value && !dayOptions.value.includes(day.value)) {
+    day.value = 0
+  }
+})
 
 fetch()
 
@@ -130,6 +150,16 @@ function go(id: string) {
           <option v-for="(name, i) in MONTHS" :key="i" :value="i + 1">{{ name }}</option>
         </select>
 
+        <select
+          v-model="day"
+          class="filter-select filter-select--narrow"
+          :disabled="!month"
+          @change="onSelectChange"
+        >
+          <option :value="0">Day</option>
+          <option v-for="d in dayOptions" :key="d" :value="d">{{ d }}</option>
+        </select>
+
         <button v-if="hasFilters" class="clear-btn" @click="clearFilters">Clear</button>
       </div>
 
@@ -143,6 +173,11 @@ function go(id: string) {
       <p v-else-if="!results.length" class="state-msg">No logs found.</p>
 
       <template v-else>
+        <div class="results-header">
+          <span class="results-count">{{ total.toLocaleString() }} result{{ total === 1 ? '' : 's' }}</span>
+          <span v-if="total > 200" class="results-cap-note">— showing first 200, narrow your search</span>
+        </div>
+
         <table class="logs-table">
           <thead>
             <tr>
@@ -171,9 +206,6 @@ function go(id: string) {
           </tbody>
         </table>
 
-        <p v-if="results.length === 200" class="result-cap">
-          Showing first 200 results — refine your search to see more.
-        </p>
       </template>
     </div>
   </div>
@@ -287,8 +319,29 @@ function go(id: string) {
 }
 
 /* ── State messages ─────────────────────────────────────────── */
-.state-msg  { color: var(--text-muted); font-size: 0.875rem; margin: 1rem 0 0; }
-.result-cap { color: var(--text-muted); font-size: 0.75rem;  margin-top: 0.75rem; }
+.state-msg { color: var(--text-muted); font-size: 0.875rem; margin: 1rem 0 0; }
+
+.results-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.results-count {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.results-cap-note {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.75rem;
+  color: hsl(35, 80%, 55%);
+}
 
 /* ── Table ──────────────────────────────────────────────────── */
 .logs-table {
