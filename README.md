@@ -10,26 +10,44 @@ Supports any Wrath of the Lich King (3.3.5) server.
 
 ## Self hosting
 
+### Backend
+
 - Install packages from `requirements.txt`
 
-- Run `python Z_SERVER.py` OR `gunicorn3 Z_SERVER:SERVER --port 5000 -D`
+- Run `python Z_SERVER.py` (port 5000)
 
-- Visit <http://localhost:5000/>
+#### Optional services
 
-#### Optional
-##### Top
+- **Top rankings:** `python server_top.py` OR `uvicorn server_top:app --port 5020 --proxy-headers`
+- **File uploads:** `python server_upload.py` OR `uvicorn server_upload:app --port 5010 --proxy-headers`
 
-- Run `python server_top.py` OR `uvicorn server_top:app --port 5020 --proxy-headers`
-
-##### File uploads
-
-- Run `python server_upload.py` OR `uvicorn server_upload:app --port 5010 --proxy-headers`
-
-##### Download spells/classes icons pack
+#### Download spells/classes icons pack
 
 - [Google Drive download](https://drive.google.com/file/d/17DyiCJts01CkFIkd0-G1dVAypIlxd0pP)
 
 - Extract to root folder.
+
+### Frontend (Vue)
+
+#### Development (Vite dev server with hot reload)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Visit <http://localhost:5173/> — Vite proxies `/api`, `/static`, `/upload` to Flask on port 5000 and `/top`, `/pve_stats`, `/character` to server_top on port 5020.
+
+#### Production (Flask serves built files)
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+Then start `python Z_SERVER.py` and visit <http://localhost:5000/> — Flask serves the built `frontend/dist/` directly.
 
 ## Showcase
 
