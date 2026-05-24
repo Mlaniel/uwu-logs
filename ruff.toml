@@ -1,0 +1,6 @@
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # line length — not enforced in this codebase
+
+[format]
+quote-style = "double"
