@@ -500,6 +500,29 @@ def report_powers(report_id: str):
     return jsonify(data)
 
 
+# ─── GET /api/v2/reports/<id>/valks/ ─────────────────────────────────────────
+# Query: ?s=&f= (optional boss segment params)
+# Response: { ALL_GRABS, GRABS_TOTAL, WAVES, PLAYER_CLASSES }
+# ALL_GRABS: list of lists (each inner list = player names grabbed that wave)
+
+@apiv2_bp.route("/reports/<report_id>/valks/")
+def report_valks(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        data = report.valk_info_all(segments)
+        data["ALL_GRABS"] = [list(wave) for wave in data["ALL_GRABS"]]
+        data["PLAYER_CLASSES"] = default_params["PLAYER_CLASSES"]
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(data)
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.

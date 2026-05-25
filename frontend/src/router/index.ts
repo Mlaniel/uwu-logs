@@ -13,6 +13,7 @@ import Consumables from '../views/Consumables.vue'
 import Entities from '../views/Entities.vue'
 import Auras from '../views/Auras.vue'
 import Powers from '../views/Powers.vue'
+import Valks from '../views/Valks.vue'
 import NotFound from '../views/NotFound.vue'
 
 const router = createRouter({
@@ -30,6 +31,7 @@ const router = createRouter({
     { path: '/reports/:id/entities', component: Entities },
     { path: '/reports/:id/auras', component: Auras },
     { path: '/reports/:id/powers', component: Powers },
+    { path: '/reports/:id/valks', component: Valks },
     { path: '/top', component: Rankings },
     { path: '/character', component: Character },
     { path: '/:pathMatch(.*)*', component: NotFound },
