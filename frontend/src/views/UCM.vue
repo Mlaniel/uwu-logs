@@ -106,7 +106,6 @@ function playerLink(guid: string): string {
   return `/reports/${reportId.value}/player/${encodeURIComponent(name)}`
 }
 
-const tooltipFields = ['actual', 'overkill', 'pets'] as const
 </script>
 
 <template>

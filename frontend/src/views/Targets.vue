@@ -107,8 +107,6 @@ const visiblePlayers = computed<string[]>(() => {
   })
 })
 
-const totalRow = computed<string>(() => 'Total')
-
 function cell(targetName: string, guid: string): string {
   return data.value?.TARGETS[targetName]?.[guid] ?? ''
 }
