@@ -523,6 +523,32 @@ def report_valks(report_id: str):
     return jsonify(data)
 
 
+# ─── GET /api/v2/reports/<id>/lady-spirits/ ──────────────────────────────────
+# Query: ?s=&f= (optional boss segment params)
+# Response: { PULLS: [[{by, targets_n, damage, prevented}, ...], ...], PLAYER_CLASSES }
+
+@apiv2_bp.route("/reports/<report_id>/lady-spirits/")
+def report_lady_spirits(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        pulls = report.lady_spirits_wrap(segments)
+        for pull in pulls:
+            for entry in pull:
+                entry.pop("targets", None)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({
+        "PULLS": pulls,
+        "PLAYER_CLASSES": default_params["PLAYER_CLASSES"],
+    })
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.
