@@ -15,6 +15,7 @@ import Auras from '../views/Auras.vue'
 import Powers from '../views/Powers.vue'
 import Valks from '../views/Valks.vue'
 import LadySpirits from '../views/LadySpirits.vue'
+import UCM from '../views/UCM.vue'
 import NotFound from '../views/NotFound.vue'
 
 const router = createRouter({
@@ -34,6 +35,7 @@ const router = createRouter({
     { path: '/reports/:id/powers', component: Powers },
     { path: '/reports/:id/valks', component: Valks },
     { path: '/reports/:id/lady-spirits', component: LadySpirits },
+    { path: '/reports/:id/ucm', component: UCM },
     { path: '/top', component: Rankings },
     { path: '/character', component: Character },
     { path: '/:pathMatch(.*)*', component: NotFound },

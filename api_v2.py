@@ -549,6 +549,45 @@ def report_lady_spirits(report_id: str):
     })
 
 
+# ─── GET /api/v2/reports/<id>/ucm/ ───────────────────────────────────────────
+# Query: ?s=&f= (optional boss segment params)
+# Response: { UCM, SPECS, GUID_NAMES }
+# UCM: [[{source(guid), timestamp, stacks, players_hit, actual_total, actual{guid:val}, ...}]]
+# SPECS: {guid: {name, class, icon, spec}}
+# GUID_NAMES: {guid: name}  (for pets and any non-spec entities in tooltips)
+
+@apiv2_bp.route("/reports/<report_id>/ucm/")
+def report_ucm(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        raw = report.parse_ucm_wrap(segments)
+        ucm_data = raw["UCM"]
+        specs = raw["SPECS"]
+        guid_to_name = raw["guid_to_name"]
+
+        all_guids: set[str] = set()
+        for pull in ucm_data:
+            for entry in pull:
+                all_guids.add(entry["source"])
+                for field in ("actual", "full", "prevented", "overkill", "pets"):
+                    all_guids.update(entry.get(field, {}).keys())
+
+        guid_names = {g: guid_to_name(g) for g in all_guids if g not in specs}
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({
+        "UCM": ucm_data,
+        "SPECS": specs,
+        "GUID_NAMES": guid_names,
+    })
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.
