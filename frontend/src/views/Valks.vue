@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -69,9 +70,18 @@ watch(reportId, fetchValks, { immediate: true })
 
 const loading = computed(() => reportLoading.value || dataLoading.value)
 
-const players = computed<string[]>(() =>
-  data.value ? Object.keys(data.value.GRABS_TOTAL) : []
-)
+const { sortKey, setSort, sortIcon, sorted } = useSort('total')
+
+const sortedPlayers = computed<string[]>(() => {
+  if (!data.value) return []
+  return sorted(Object.keys(data.value.GRABS_TOTAL), (player, key) => {
+    if (key === 'name') return player
+    if (key === 'total') return data.value!.GRABS_TOTAL[player]
+    // wave index key
+    const idx = Number(key)
+    return data.value!.ALL_GRABS[idx]?.includes(player) ? 1 : 0
+  })
+})
 
 function wasGrabbed(player: string, waveIdx: number): boolean {
   return data.value?.ALL_GRABS[waveIdx]?.includes(player) ?? false
@@ -104,13 +114,33 @@ function wasGrabbed(player: string, waveIdx: number): boolean {
             <caption>Valk grabs per wave</caption>
             <thead>
               <tr>
-                <th class="player-cell">Name</th>
-                <th class="num-cell">Total</th>
-                <th v-for="wave in data.WAVES" :key="wave" class="wave-cell">{{ wave }}</th>
+                <th
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'name' }"
+                  @click="setSort('name')"
+                >
+                  Name<span class="sort-icon" :class="{ active: sortKey === 'name' }">{{ sortIcon('name') }}</span>
+                </th>
+                <th
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'total' }"
+                  @click="setSort('total')"
+                >
+                  Total<span class="sort-icon" :class="{ active: sortKey === 'total' }">{{ sortIcon('total') }}</span>
+                </th>
+                <th
+                  v-for="(wave, idx) in data.WAVES"
+                  :key="wave"
+                  class="wave-cell sortable"
+                  :class="{ 'sort-active': sortKey === String(idx) }"
+                  @click="setSort(String(idx))"
+                >
+                  {{ wave }}<span class="sort-icon" :class="{ active: sortKey === String(idx) }">{{ sortIcon(String(idx)) }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="player in players" :key="player">
+              <tr v-for="player in sortedPlayers" :key="player">
                 <td class="player-cell">
                   <router-link
                     :class="data.PLAYER_CLASSES[player]"
@@ -184,6 +214,7 @@ function wasGrabbed(player: string, waveIdx: number): boolean {
 .wave-cell {
   min-width: 2rem;
   width: 2rem;
+  text-align: center;
 }
 
 .grab {

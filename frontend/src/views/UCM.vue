@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -106,6 +107,20 @@ function playerLink(guid: string): string {
   return `/reports/${reportId.value}/player/${encodeURIComponent(name)}`
 }
 
+const { sortKey, setSort, sortIcon, sorted } = useSort('actual_total')
+
+const sortedPulls = computed<UCMEntry[][]>(() => {
+  if (!data.value) return []
+  return data.value.UCM.map(pull =>
+    sorted(pull, (entry, key) => {
+      if (key === 'source') return resolveName(entry.source)
+      if (key === 'timestamp') return entry.timestamp
+      if (key === 'stacks') return entry.stacks
+      if (key === 'players_hit') return entry.players_hit
+      return (entry as Record<string, string | number>)[key] as string ?? ''
+    })
+  )
+})
 </script>
 
 <template>
@@ -129,7 +144,7 @@ function playerLink(guid: string): string {
     <template #default>
       <div v-if="data" class="ucm-wrap">
         <div
-          v-for="(pull, pullIdx) in data.UCM"
+          v-for="(pull, pullIdx) in sortedPulls"
           :key="pullIdx"
           class="pull-block"
         >
@@ -137,15 +152,69 @@ function playerLink(guid: string): string {
             <table class="ucm-table">
               <thead>
                 <tr>
-                  <th class="player-cell">Source</th>
-                  <th class="num-cell">Time</th>
-                  <th class="num-cell">Stacks</th>
-                  <th class="num-cell">Hit</th>
-                  <th class="num-cell">Actual</th>
-                  <th class="num-cell">Full</th>
-                  <th class="num-cell">Prevented</th>
-                  <th class="num-cell">Overkill</th>
-                  <th class="num-cell">Pets</th>
+                  <th
+                    class="player-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'source' }"
+                    @click="setSort('source')"
+                  >
+                    Source<span class="sort-icon" :class="{ active: sortKey === 'source' }">{{ sortIcon('source') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'timestamp' }"
+                    @click="setSort('timestamp')"
+                  >
+                    Time<span class="sort-icon" :class="{ active: sortKey === 'timestamp' }">{{ sortIcon('timestamp') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'stacks' }"
+                    @click="setSort('stacks')"
+                  >
+                    Stacks<span class="sort-icon" :class="{ active: sortKey === 'stacks' }">{{ sortIcon('stacks') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'players_hit' }"
+                    @click="setSort('players_hit')"
+                  >
+                    Hit<span class="sort-icon" :class="{ active: sortKey === 'players_hit' }">{{ sortIcon('players_hit') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'actual_total' }"
+                    @click="setSort('actual_total')"
+                  >
+                    Actual<span class="sort-icon" :class="{ active: sortKey === 'actual_total' }">{{ sortIcon('actual_total') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'full_total' }"
+                    @click="setSort('full_total')"
+                  >
+                    Full<span class="sort-icon" :class="{ active: sortKey === 'full_total' }">{{ sortIcon('full_total') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'prevented_total' }"
+                    @click="setSort('prevented_total')"
+                  >
+                    Prevented<span class="sort-icon" :class="{ active: sortKey === 'prevented_total' }">{{ sortIcon('prevented_total') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'overkill_total' }"
+                    @click="setSort('overkill_total')"
+                  >
+                    Overkill<span class="sort-icon" :class="{ active: sortKey === 'overkill_total' }">{{ sortIcon('overkill_total') }}</span>
+                  </th>
+                  <th
+                    class="num-cell sortable"
+                    :class="{ 'sort-active': sortKey === 'pets_total' }"
+                    @click="setSort('pets_total')"
+                  >
+                    Pets<span class="sort-icon" :class="{ active: sortKey === 'pets_total' }">{{ sortIcon('pets_total') }}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -166,7 +235,6 @@ function playerLink(guid: string): string {
                   <td class="num-cell">{{ entry.stacks }}</td>
                   <td class="num-cell">{{ entry.players_hit }}</td>
 
-                  <!-- Actual with tooltip -->
                   <td class="num-cell has-tooltip">
                     {{ entry.actual_total }}
                     <div v-if="Object.keys(entry.actual ?? {}).length" class="tooltip">
@@ -182,7 +250,6 @@ function playerLink(guid: string): string {
                   <td class="num-cell">{{ entry.full_total }}</td>
                   <td class="num-cell">{{ entry.prevented_total }}</td>
 
-                  <!-- Overkill with tooltip -->
                   <td class="num-cell has-tooltip">
                     {{ entry.overkill_total }}
                     <div v-if="Object.keys(entry.overkill ?? {}).length" class="tooltip">
@@ -195,7 +262,6 @@ function playerLink(guid: string): string {
                     </div>
                   </td>
 
-                  <!-- Pets with tooltip -->
                   <td class="num-cell has-tooltip">
                     {{ entry.pets_total }}
                     <div v-if="Object.keys(entry.pets ?? {}).length" class="tooltip">

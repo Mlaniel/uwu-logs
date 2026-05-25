@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -78,14 +79,16 @@ const itemIds = computed<string[]>(() =>
   data.value ? Object.keys(data.value.ITEM_INFO) : []
 )
 
-const players = computed<string[]>(() =>
-  data.value ? Object.keys(data.value.ITEMS_TOTAL) : []
-)
+const { sortKey, setSort, sortIcon, sorted } = useSort('total')
 
-function itemCount(spellId: string, player: string): string {
-  const v = data.value?.ITEMS[spellId]?.[player]
-  return v != null ? String(v) : ''
-}
+const sortedPlayers = computed<string[]>(() => {
+  if (!data.value) return []
+  return sorted(Object.keys(data.value.ITEMS_TOTAL), (player, key) => {
+    if (key === 'name') return player
+    if (key === 'total') return data.value!.ITEMS_TOTAL[player]
+    return data.value!.ITEMS[key]?.[player] ?? ''
+  })
+})
 </script>
 
 <template>
@@ -112,19 +115,39 @@ function itemCount(spellId: string, player: string): string {
           <table class="cons-table">
             <thead>
               <tr>
-                <th class="player-cell"></th>
-                <th title="Total" class="num-cell">Total</th>
-                <th v-for="sid in itemIds" :key="sid" class="icon-cell">
+                <th
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'name' }"
+                  @click="setSort('name')"
+                >
+                  <span class="sort-icon" :class="{ active: sortKey === 'name' }">{{ sortIcon('name') }}</span>
+                </th>
+                <th
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'total' }"
+                  @click="setSort('total')"
+                >
+                  Total<span class="sort-icon" :class="{ active: sortKey === 'total' }">{{ sortIcon('total') }}</span>
+                </th>
+                <th
+                  v-for="sid in itemIds"
+                  :key="sid"
+                  class="icon-cell sortable"
+                  :class="{ 'sort-active': sortKey === sid }"
+                  :title="data.ITEM_INFO[sid].name"
+                  @click="setSort(sid)"
+                >
                   <img
                     :src="`/static/icons/${data.ITEM_INFO[sid].icon}.jpg`"
                     :title="data.ITEM_INFO[sid].name"
                     class="item-icon"
                   >
+                  <span class="sort-icon" :class="{ active: sortKey === sid }">{{ sortIcon(sid) }}</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="player in players" :key="player">
+              <tr v-for="player in sortedPlayers" :key="player">
                 <td class="player-cell">
                   <router-link
                     :class="data.PLAYER_CLASSES[player]"
@@ -133,7 +156,7 @@ function itemCount(spellId: string, player: string): string {
                 </td>
                 <td class="num-cell">{{ data.ITEMS_TOTAL[player] }}</td>
                 <td v-for="sid in itemIds" :key="sid" class="num-cell">
-                  {{ itemCount(sid, player) }}
+                  {{ data.ITEMS[sid]?.[player] ?? '' }}
                 </td>
               </tr>
             </tbody>
@@ -195,12 +218,12 @@ function itemCount(spellId: string, player: string): string {
 .icon-cell {
   text-align: center;
   min-width: 2.5rem;
+  vertical-align: bottom;
 }
 
 .item-icon {
   width: 1.5rem;
   height: 1.5rem;
-  vertical-align: middle;
   display: block;
   margin: auto;
 }

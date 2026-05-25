@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -73,6 +74,20 @@ function fetchData(): void {
 watch(reportId, fetchData, { immediate: true })
 
 const loading = computed(() => reportLoading.value || dataLoading.value)
+
+const { sortKey, setSort, sortIcon, sorted } = useSort('damage')
+
+const sortedPulls = computed<SpiritEntry[][]>(() => {
+  if (!data.value) return []
+  return data.value.PULLS.map(pull =>
+    sorted(pull, (entry, key) => {
+      if (key === 'by') return entry.by
+      if (key === 'targets_n') return entry.targets_n
+      if (key === 'damage') return entry.damage
+      return entry.prevented
+    })
+  )
+})
 </script>
 
 <template>
@@ -96,17 +111,41 @@ const loading = computed(() => reportLoading.value || dataLoading.value)
     <template #default>
       <div v-if="data" class="spirits-wrap">
         <div
-          v-for="(pull, pullIdx) in data.PULLS"
+          v-for="(pull, pullIdx) in sortedPulls"
           :key="pullIdx"
           class="pull-section"
         >
           <table class="spirits-table">
             <thead>
               <tr>
-                <th class="player-cell">Player</th>
-                <th class="num-cell">Hit</th>
-                <th class="num-cell">Caused</th>
-                <th class="num-cell">Prevented</th>
+                <th
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'by' }"
+                  @click="setSort('by')"
+                >
+                  Player<span class="sort-icon" :class="{ active: sortKey === 'by' }">{{ sortIcon('by') }}</span>
+                </th>
+                <th
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'targets_n' }"
+                  @click="setSort('targets_n')"
+                >
+                  Hit<span class="sort-icon" :class="{ active: sortKey === 'targets_n' }">{{ sortIcon('targets_n') }}</span>
+                </th>
+                <th
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'damage' }"
+                  @click="setSort('damage')"
+                >
+                  Caused<span class="sort-icon" :class="{ active: sortKey === 'damage' }">{{ sortIcon('damage') }}</span>
+                </th>
+                <th
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'prevented' }"
+                  @click="setSort('prevented')"
+                >
+                  Prevented<span class="sort-icon" :class="{ active: sortKey === 'prevented' }">{{ sortIcon('prevented') }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -75,15 +76,13 @@ watch(reportId, fetchTargets, { immediate: true })
 
 const loading = computed(() => reportLoading.value || targetsLoading.value)
 
-// ── Class filter ──────────────────────────────────────────────────────────────
+// ── Class filter ───────────────────────────────────────────────────────────
 
 const hiddenClasses = ref<Set<string>>(new Set())
 
 const availableClasses = computed<string[]>(() => {
   if (!data.value) return []
-  return [...new Set(
-    Object.values(data.value.SPECS).map(s => s.class)
-  )].sort()
+  return [...new Set(Object.values(data.value.SPECS).map(s => s.class))].sort()
 })
 
 function toggleClass(cls: string): void {
@@ -93,18 +92,29 @@ function toggleClass(cls: string): void {
   hiddenClasses.value = s
 }
 
-// ── Table data ────────────────────────────────────────────────────────────────
+// ── Table data + sort ──────────────────────────────────────────────────────
 
 const targetNames = computed<string[]>(() =>
   data.value ? Object.keys(data.value.TARGETS) : []
 )
 
-const visiblePlayers = computed<string[]>(() => {
+const { sortKey, setSort, sortIcon, sorted } = useSort()
+
+watch(targetNames, names => {
+  if (names.length && !sortKey.value) sortKey.value = names[0]
+})
+
+const sortedPlayers = computed<string[]>(() => {
   if (!data.value) return []
-  return data.value.PLAYERS_SORTED.filter(guid => {
+  const base = data.value.PLAYERS_SORTED.filter(guid => {
     const spec = data.value!.SPECS[guid]
     return spec && !hiddenClasses.value.has(spec.class)
   })
+  return sorted(base, (guid, key) =>
+    key === 'name'
+      ? (data.value?.SPECS[guid]?.name ?? guid)
+      : (data.value?.TARGETS[key]?.[guid] ?? '')
+  )
 })
 
 function cell(targetName: string, guid: string): string {
@@ -136,7 +146,6 @@ function totalCell(targetName: string): string {
 
     <template #default>
       <div v-if="data" class="targets-wrap">
-        <!-- Class filter -->
         <div v-if="availableClasses.length" class="class-filter">
           <button
             v-for="cls in availableClasses"
@@ -146,17 +155,30 @@ function totalCell(targetName: string): string {
           >{{ cls }}</button>
         </div>
 
-        <!-- Damage matrix -->
         <div class="table-scroll">
           <table class="targets-table">
             <thead>
               <tr>
-                <th class="player-cell"></th>
-                <th v-for="tgt in targetNames" :key="tgt">{{ tgt }}</th>
+                <th
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'name' }"
+                  @click="setSort('name')"
+                >
+                  <span class="sort-icon" :class="{ active: sortKey === 'name' }">{{ sortIcon('name') }}</span>
+                </th>
+                <th
+                  v-for="tgt in targetNames"
+                  :key="tgt"
+                  class="sortable"
+                  :class="{ 'sort-active': sortKey === tgt }"
+                  @click="setSort(tgt)"
+                >
+                  {{ tgt }}<span class="sort-icon" :class="{ active: sortKey === tgt }">{{ sortIcon(tgt) }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="guid in visiblePlayers" :key="guid">
+              <tr v-for="guid in sortedPlayers" :key="guid">
                 <td class="player-cell">
                   <img
                     v-if="data.SPECS[guid]"
@@ -256,7 +278,6 @@ tfoot td {
   vertical-align: middle;
 }
 
-/* Class filter */
 .class-filter {
   display: flex;
   flex-wrap: wrap;

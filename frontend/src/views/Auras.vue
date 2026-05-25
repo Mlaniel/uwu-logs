@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -78,9 +79,21 @@ const spellIds = computed<string[]>(() =>
   data.value ? Object.keys(data.value.AURA_INFO) : []
 )
 
-const players = computed<string[]>(() =>
-  data.value ? Object.keys(data.value.AURA_UPTIME) : []
-)
+const { sortKey, setSort, sortIcon, sorted } = useSort()
+
+// Default: first aura uptime
+watch(spellIds, ids => {
+  if (ids.length && !sortKey.value) sortKey.value = ids[0]
+})
+
+const sortedPlayers = computed<string[]>(() => {
+  if (!data.value) return []
+  return sorted(Object.keys(data.value.AURA_UPTIME), (player, key) => {
+    if (key === 'name') return player
+    // key is a spell id — sort by uptime
+    return data.value!.AURA_UPTIME[player]?.[key] ?? ''
+  })
+})
 </script>
 
 <template>
@@ -107,24 +120,33 @@ const players = computed<string[]>(() =>
           <table class="auras-table">
             <thead>
               <tr>
-                <th class="player-cell"></th>
+                <th
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'name' }"
+                  @click="setSort('name')"
+                >
+                  <span class="sort-icon" :class="{ active: sortKey === 'name' }">{{ sortIcon('name') }}</span>
+                </th>
                 <th
                   v-for="sid in spellIds"
                   :key="sid"
                   :title="data.AURA_INFO[sid].name"
                   colspan="2"
-                  class="icon-cell"
+                  class="icon-cell sortable"
+                  :class="{ 'sort-active': sortKey === sid }"
+                  @click="setSort(sid)"
                 >
                   <img
                     :src="`/static/icons/${data.AURA_INFO[sid].icon}.jpg`"
                     :alt="sid"
                     class="spell-icon"
                   >
+                  <span class="sort-icon" :class="{ active: sortKey === sid }">{{ sortIcon(sid) }}</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="player in players" :key="player">
+              <tr v-for="player in sortedPlayers" :key="player">
                 <td class="player-cell">
                   <router-link
                     :class="data.PLAYER_CLASSES[player]"
@@ -194,6 +216,7 @@ const players = computed<string[]>(() =>
 
 .icon-cell {
   min-width: 6rem;
+  vertical-align: bottom;
 }
 
 .spell-icon {

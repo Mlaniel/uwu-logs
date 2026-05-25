@@ -183,25 +183,23 @@ td.number,
 
 .page-shell {
   display: flex;
-  margin-top: var(--nav-height);
   min-height: calc(100vh - var(--nav-height));
 }
 
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  flex-shrink: 0;
   background: var(--surface);
-  position: fixed;
-  top: var(--nav-height);
-  left: 0;
-  bottom: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
 .main-content {
-  margin-left: var(--sidebar-width);
   flex: 1;
   min-width: 0;
   padding: 1rem;
@@ -209,15 +207,7 @@ td.number,
 
 @media (max-width: 768px) {
   .sidebar {
-    transform: translateX(-100%);
-    transition: transform 0.2s ease;
-    z-index: 90;
-  }
-  .sidebar.open {
-    transform: translateX(0);
-  }
-  .main-content {
-    margin-left: 0;
+    display: none;
   }
 }
 
@@ -234,6 +224,29 @@ td.number,
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+}
+
+/* ─── Sortable table headers ────────────────────────────────────────────── */
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  background: color-mix(in srgb, var(--primary) 10%, var(--background)) !important;
+}
+th.sort-active {
+  border-bottom: 2px solid var(--primary) !important;
+}
+.sort-icon {
+  font-size: 0.7em;
+  margin-left: 0.2em;
+  opacity: 0.3;
+  display: inline-block;
+}
+.sort-icon.active {
+  opacity: 1;
+  color: var(--primary);
 }
 
 /* ─── Sidebar nav links (Timeline / Compare / etc.) ────────────────────── */

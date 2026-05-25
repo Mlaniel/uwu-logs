@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -50,9 +51,17 @@ watch(reportId, fetchData, { immediate: true })
 
 const loading = computed(() => reportLoading.value || dataLoading.value)
 
-const players = computed<string[]>(() =>
-  data.value ? Object.keys(data.value.ATTEMPT_DATA) : []
-)
+const { sortKey, setSort, sortIcon, sorted } = useSort('name', 'asc')
+
+const sortedPlayers = computed<string[]>(() => {
+  if (!data.value) return []
+  return sorted(Object.keys(data.value.ATTEMPT_DATA), (guid, key) => {
+    if (key === 'name') return data.value?.SPECS[guid]?.name ?? guid
+    // sort by a specific attempt index
+    const idx = Number(key)
+    return data.value!.ATTEMPT_DATA[guid]?.[idx] ?? ''
+  })
+})
 </script>
 
 <template>
@@ -80,12 +89,26 @@ const players = computed<string[]>(() =>
           <table class="tocvalks-table">
             <thead>
               <tr>
-                <th class="player-cell"></th>
-                <th v-for="target in data.TARGETS" :key="target" class="num-cell">{{ target }}</th>
+                <th
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'name' }"
+                  @click="setSort('name')"
+                >
+                  <span class="sort-icon" :class="{ active: sortKey === 'name' }">{{ sortIcon('name') }}</span>
+                </th>
+                <th
+                  v-for="(target, idx) in data.TARGETS"
+                  :key="target"
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === String(idx) }"
+                  @click="setSort(String(idx))"
+                >
+                  {{ target }}<span class="sort-icon" :class="{ active: sortKey === String(idx) }">{{ sortIcon(String(idx)) }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="guid in players" :key="guid">
+              <tr v-for="guid in sortedPlayers" :key="guid">
                 <td class="player-cell" :title="data.SPECS[guid]?.spec">
                   <img
                     v-if="data.SPECS[guid]"

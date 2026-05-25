@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
+import { useSort } from '../composables/useSort'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
 import ReportNav from '../components/ReportNav.vue'
@@ -93,6 +94,24 @@ watch(data, d => {
     activeTab.value = d.LABELS[0][1]
   }
 }, { immediate: true })
+
+const { sortKey, sortDir, setSort, sortIcon, sorted } = useSort('total')
+
+// Reset sort direction (not key) when tab changes
+watch(activeTab, () => { sortDir.value = 'desc' })
+
+const tabSpellIds = computed<string[]>(() =>
+  data.value && activeTab.value ? Object.keys(data.value.SPELLS[activeTab.value]) : []
+)
+
+const sortedPlayers = computed<string[]>(() => {
+  if (!data.value || !activeTab.value) return []
+  return sorted(Object.keys(data.value.POWERS[activeTab.value]), (player, key) => {
+    if (key === 'name') return player
+    if (key === 'total') return data.value!.TOTAL[activeTab.value]?.[player] ?? ''
+    return data.value!.POWERS[activeTab.value]?.[player]?.[key] ?? ''
+  })
+})
 </script>
 
 <template>
@@ -129,27 +148,39 @@ watch(data, d => {
           <table class="powers-table">
             <thead>
               <tr>
-                <th class="player-cell"></th>
-                <th class="num-cell">Total</th>
                 <th
-                  v-for="sid in Object.keys(data.SPELLS[activeTab])"
+                  class="player-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'name' }"
+                  @click="setSort('name')"
+                >
+                  <span class="sort-icon" :class="{ active: sortKey === 'name' }">{{ sortIcon('name') }}</span>
+                </th>
+                <th
+                  class="num-cell sortable"
+                  :class="{ 'sort-active': sortKey === 'total' }"
+                  @click="setSort('total')"
+                >
+                  Total<span class="sort-icon" :class="{ active: sortKey === 'total' }">{{ sortIcon('total') }}</span>
+                </th>
+                <th
+                  v-for="sid in tabSpellIds"
                   :key="sid"
                   :title="data.SPELLS[activeTab][sid].name"
-                  class="icon-cell"
+                  class="icon-cell sortable"
+                  :class="{ 'sort-active': sortKey === sid }"
+                  @click="setSort(sid)"
                 >
                   <img
                     :src="`/static/icons/${data.SPELLS[activeTab][sid].icon}.jpg`"
                     :alt="sid"
                     class="spell-icon"
                   >
+                  <span class="sort-icon" :class="{ active: sortKey === sid }">{{ sortIcon(sid) }}</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="(playerData, player) in data.POWERS[activeTab]"
-                :key="player"
-              >
+              <tr v-for="player in sortedPlayers" :key="player">
                 <td class="player-cell">
                   <router-link
                     :class="data.PLAYER_CLASSES[player]"
@@ -158,10 +189,10 @@ watch(data, d => {
                 </td>
                 <td class="num-cell">{{ data.TOTAL[activeTab][player] }}</td>
                 <td
-                  v-for="sid in Object.keys(data.SPELLS[activeTab])"
+                  v-for="sid in tabSpellIds"
                   :key="sid"
                   class="num-cell"
-                >{{ playerData[sid] ?? '' }}</td>
+                >{{ data.POWERS[activeTab]?.[player]?.[sid] ?? '' }}</td>
               </tr>
             </tbody>
             <tfoot>
@@ -169,7 +200,7 @@ watch(data, d => {
                 <td class="player-cell">Total</td>
                 <td class="num-cell"></td>
                 <td
-                  v-for="sid in Object.keys(data.SPELLS[activeTab])"
+                  v-for="sid in tabSpellIds"
                   :key="sid"
                   class="num-cell"
                 >{{ data.SPELLS[activeTab][sid].value }}</td>
@@ -256,6 +287,7 @@ watch(data, d => {
 .icon-cell {
   min-width: 2.5rem;
   text-align: center;
+  vertical-align: bottom;
 }
 
 .spell-icon {
