@@ -438,6 +438,26 @@ def report_consumables(report_id: str):
     return jsonify(data)
 
 
+# ─── GET /api/v2/reports/<id>/entities/ ──────────────────────────────────────
+# Uses first segment only (same as Flask). No boss filter.
+# Response: { ENTITIES: { category: [[name, guid], ...] } }
+
+@apiv2_bp.route("/reports/<report_id>/entities/")
+def report_entities(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        data = report.entities(*segments[0])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(data)
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.
