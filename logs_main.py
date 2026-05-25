@@ -488,11 +488,28 @@ class THE_LOGS(
         players = []
         targets = {}
         spells = {}
+        spec_info = self.get_slice_spec_info(*segments[0]) if segments else {}
+
+        # Aggregate per-source DoT uptime across all segments, then average.
+        dot_uptime_lists: dict = defaultdict(lambda: defaultdict(list))
+        for s0, f0 in segments:
+            for p_guid, p_uptime in self.get_dot_uptime_by_source(s0, f0).items():
+                for spell_id, pct_str in p_uptime.items():
+                    dot_uptime_lists[p_guid][spell_id].append(float(pct_str))
+        dot_uptime: dict = {
+            p_guid: {sid: f"{sum(pcts)/len(pcts):.2f}" for sid, pcts in sid_pcts.items()}
+            for p_guid, sid_pcts in dot_uptime_lists.items()
+        }
+
         for guid, class_name in self.get_classes().items():
             if class_name != class_filter:
                 continue
             data = self.get_numbers_breakdown_wrap(segments, guid, filter_guid=tGUID)
             data["NAME"] = self.guid_to_name(guid)
+            player_spec = spec_info.get(guid, {})
+            data["SPEC_ICON"] = player_spec.get("icon", "")
+            data["SPEC"] = player_spec.get("spec", "")
+            data["DOT_UPTIME"] = dot_uptime.get(guid, {})
             targets |= data["TARGETS"]
             spells |= data["SPELLS_DATA"]
             players.append(data)

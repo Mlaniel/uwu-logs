@@ -678,6 +678,73 @@ class AuraUptime(logs_base.THE_LOGS):
         return new_auras
 
     @logs_base.cache_wrap
+    def get_dot_uptime_by_source(self, s, f):
+        """
+        Returns {source_guid: {spell_id: "XX.XX"}} — the % of the segment duration
+        that each player-sourced periodic spell was ticking on any non-player target.
+        Uses SPELL_PERIODIC_DAMAGE ticks as evidence of DoT activity, which correctly
+        handles duration refreshes (Everlasting Affliction etc.) that only fire
+        SPELL_AURA_REFRESH and would be missed by aura-event tracking.
+        """
+        logs_slice = self.LOGS[s:f]
+        if not logs_slice:
+            return {}
+        first_line = logs_slice[0]
+        last_line = logs_slice[-1]
+        dur = self.get_timedelta_seconds(first_line, last_line)
+        if not dur:
+            return {}
+
+        # Collect tick timestamps (seconds from fight start) per (source_guid, spell_id)
+        tick_times: dict = defaultdict(list)
+        for line in logs_slice:
+            if 'SPELL_PERIODIC_DAMAGE' not in line:
+                continue
+            try:
+                timestamp, flag, source_guid, _, target_guid, _, spell_id, _ = line.split(',', 7)
+            except ValueError:
+                continue
+            if flag != 'SPELL_PERIODIC_DAMAGE':
+                continue
+            if not is_player(source_guid):
+                continue
+            if is_player(target_guid):
+                continue
+            t = self.get_timedelta_seconds(first_line, timestamp)
+            tick_times[(source_guid, spell_id)].append(t)
+
+        # A gap larger than this between consecutive ticks means the DoT dropped off.
+        # 6s is safe: even unhasted DoTs tick every ~3s; hasted ones tick faster.
+        MAX_GAP = 6.0
+
+        source_secs: dict = defaultdict(lambda: defaultdict(float))
+        for (source_guid, spell_id), ts in tick_times.items():
+            ts.sort()
+            # Group into continuous windows, then sum (first_tick to last_tick + avg_interval)
+            window: list = [ts[0]]
+            total = 0.0
+            for t in ts[1:]:
+                if t - window[-1] > MAX_GAP:
+                    n = len(window)
+                    interval = (window[-1] - window[0]) / (n - 1) if n > 1 else 3.0
+                    total += (window[-1] - window[0]) + interval
+                    window = [t]
+                else:
+                    window.append(t)
+            n = len(window)
+            interval = (window[-1] - window[0]) / (n - 1) if n > 1 else 3.0
+            total += (window[-1] - window[0]) + interval
+            source_secs[source_guid][spell_id] += min(total, dur)
+
+        return {
+            guid: {
+                spell_id: f"{min(secs / dur * 100, 100):.2f}"
+                for spell_id, secs in spells.items()
+            }
+            for guid, spells in source_secs.items()
+        }
+
+    @logs_base.cache_wrap
     def auras_info(self, s, f):
         logs_slice = self.LOGS[s:f]
         data = get_raid_buff_count(logs_slice)
