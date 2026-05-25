@@ -127,7 +127,7 @@ function totalCell(targetName: string): string {
 </script>
 
 <template>
-  <BasePage :title="reportTitle || 'Targets'" :loading="loading" :error="error ?? undefined">
+  <BasePage :title="reportTitle || 'Targets'" :loading="loading" :error="error ?? undefined" :report="report" :selected-href="selectedHref">
     <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
       <BossSelector

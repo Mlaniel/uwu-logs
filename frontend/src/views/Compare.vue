@@ -132,7 +132,7 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
 
     <!-- Main content -->
     <main class="main-content">
-      <BasePage :loading="reportLoading" :error="null">
+      <BasePage :loading="reportLoading" :error="null" :report="report" :selected-href="selectedHref">
         <!-- Class picker -->
         <div class="controls">
           <div class="control-group">

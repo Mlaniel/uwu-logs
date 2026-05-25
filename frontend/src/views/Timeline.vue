@@ -424,7 +424,7 @@ const damageRouteQuery = computed(() => {
         <button v-if="zoomRange" class="zoom-reset" @click="resetZoom">Reset zoom</button>
       </div>
 
-      <BasePage :loading="timelineLoading" :error="error">
+      <BasePage :loading="timelineLoading" :error="error" :report="report" :selected-href="selectedHref">
         <div v-if="data" class="timeline-wrap">
           <!-- Ruler + death markers -->
           <div class="ruler-row">

@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import ReportInfoBar from './ReportInfoBar.vue'
+import type { ReportApiResponse } from '../types/api'
+
 defineProps<{
   title?: string
   loading?: boolean
   error?: string | null
+  report?: ReportApiResponse | null
+  selectedHref?: string
 }>()
 </script>
 
@@ -13,6 +18,7 @@ defineProps<{
     </aside>
 
     <main class="main-content">
+      <ReportInfoBar v-if="report" :report="report" :selected-href="selectedHref ?? ''" />
       <div v-if="error" class="base-error">{{ error }}</div>
       <div v-else-if="loading" class="base-skeleton">
         <div class="skeleton sk-title" />

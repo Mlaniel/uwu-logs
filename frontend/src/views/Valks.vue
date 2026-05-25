@@ -89,7 +89,7 @@ function wasGrabbed(player: string, waveIdx: number): boolean {
 </script>
 
 <template>
-  <BasePage :title="reportTitle || 'Valk Grabs'" :loading="loading" :error="error ?? undefined">
+  <BasePage :title="reportTitle || 'Valk Grabs'" :loading="loading" :error="error ?? undefined" :report="report" :selected-href="selectedHref">
     <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
       <BossSelector

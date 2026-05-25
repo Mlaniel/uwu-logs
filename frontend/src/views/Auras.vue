@@ -97,7 +97,7 @@ const sortedPlayers = computed<string[]>(() => {
 </script>
 
 <template>
-  <BasePage :title="reportTitle || 'Auras'" :loading="loading" :error="error ?? undefined">
+  <BasePage :title="reportTitle || 'Auras'" :loading="loading" :error="error ?? undefined" :report="report" :selected-href="selectedHref">
     <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
       <BossSelector

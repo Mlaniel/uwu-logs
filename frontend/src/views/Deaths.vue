@@ -90,7 +90,7 @@ function guidClass(guid: string): string {
 </script>
 
 <template>
-  <BasePage :title="reportTitle || 'Deaths'" :loading="loading" :error="error ?? undefined">
+  <BasePage :title="reportTitle || 'Deaths'" :loading="loading" :error="error ?? undefined" :report="report" :selected-href="selectedHref">
     <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
       <BossSelector

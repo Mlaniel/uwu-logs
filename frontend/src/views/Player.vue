@@ -138,7 +138,7 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
         :selected-href="selectedHref"
       />
 
-      <BasePage :loading="loading" :error="error">
+      <BasePage :loading="loading" :error="error" :report="report" :selected-href="selectedHref">
         <!-- Target filter -->
         <div v-if="data?.TARGETS" class="targets-bar">
           <span class="targets-label">Filter target:</span>

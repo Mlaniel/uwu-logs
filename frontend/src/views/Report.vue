@@ -228,7 +228,7 @@ const displayPlayers = computed<Player[]>(() => {
 
     <!-- Main content -->
     <main class="main-content">
-      <BasePage :loading="loading" :error="error">
+      <BasePage :loading="loading" :error="error" :report="report" :selected-href="selectedHref">
         <!-- Spec filter -->
         <SpecFilter
           :players="players"

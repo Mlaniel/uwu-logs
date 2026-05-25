@@ -124,7 +124,7 @@ const sortedPulls = computed<UCMEntry[][]>(() => {
 </script>
 
 <template>
-  <BasePage :title="reportTitle || 'UCM'" :loading="loading" :error="error ?? undefined">
+  <BasePage :title="reportTitle || 'UCM'" :loading="loading" :error="error ?? undefined" :report="report" :selected-href="selectedHref">
     <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
       <BossSelector
