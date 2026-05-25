@@ -21,6 +21,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import h_cleaner
 import logs_calendar
 import logs_main
+import report_cache
 from constants import FLAG_ORDER
 from c_bosses import ALL_FIGHT_NAMES, BOSSES_FROM_HTML
 from c_path import Directories, Files
@@ -42,23 +43,21 @@ SERVER = Flask(__name__)
 SERVER.wsgi_app = ProxyFix(SERVER.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 from api_v2 import apiv2_bp
+from api_top import top_bp
 SERVER.register_blueprint(apiv2_bp)
+SERVER.register_blueprint(top_bp)
 SERVER.jinja_env.trim_blocks = True
 SERVER.jinja_env.lstrip_blocks = True
 
 USE_FILTER = True
 MAX_SURVIVE_LOGS = T_DELTA["30MIN"]
-IGNORED_PATHS = {"/upload", "/upload_progress"}
+IGNORED_PATHS = {"/upload", "/upload_progress", "/top", "/pve_stats", "/character", "/rank", "/top_points", "/top_speedrun"}
 LOGS_LIST_MONTHS = list(enumerate(MONTHS))
 SERVER_STARTED = datetime.now()
 SERVER_STARTED_STR = SERVER_STARTED.strftime("%y-%m-%d")
 YEARS = list(range(2018, SERVER_STARTED.year+2))
 
 CACHED_PAGES = {}
-OPENED_LOGS: dict[str, logs_main.THE_LOGS] = {}
-
-CLEANER = h_cleaner.MemoryCleaner(OPENED_LOGS)
-
 LOGGER_CONNECTIONS = Loggers.server_main
 LOGGER_CONNECTIONS.debug("Starting server...")
 
@@ -68,23 +67,20 @@ def add_log_entry(ip, method, msg):
 def load_report(report_id: str):
     now = datetime.now()
     ip = request.remote_addr
-    if report_id in OPENED_LOGS:
-        report = OPENED_LOGS[report_id]
+    # Cache hit — skip rate limiting
+    if report_id in report_cache.OPENED_LOGS:
+        report = report_cache.OPENED_LOGS[report_id]
         report.last_access = now
         return report
-    
+
     if _validate is not None:
         _limit = _validate.rate_limited_reports(ip, "report", report_id)
         if _limit:
             add_log_entry(ip, "SPAM", report_id)
             raise TooManyRequests(retry_after=_limit)
-    
-    CLEANER.start()
-    report = logs_main.THE_LOGS(report_id)
-    OPENED_LOGS[report_id] = report
-    add_log_entry(ip, "OPENNED", report_id)
 
-    report.last_access = now
+    report = report_cache.open_report(report_id)
+    add_log_entry(ip, "OPENNED", report_id)
     return report
 
 @SERVER.errorhandler(404)
@@ -111,16 +107,17 @@ def method429(e: TooManyRequests):
 
 @SERVER.errorhandler(Exception)
 def handle_exception(e):
+    from flask import jsonify
     LOGGER_CONNECTIONS.exception(f"{request.remote_addr:>15} | {request.method:<7} | {get_incoming_connection_info()}")
     error_class = f"{e.__class__.__module__}.{e.__class__.__name__}"
-    error_msg = ""
     if error_class == "zstd.Error":
         error_msg = "Logs file is corrupted"
     else:
         error_msg = f"{error_class}: {e}"
-    if request.method == 'GET':
-        return render_template("500.html", ERROR_MESSAGE=error_msg)
-    return error_msg, 500
+    # Return JSON for API paths and all non-GET requests (fetch calls from Vue)
+    if request.path.startswith('/api/') or request.method != 'GET':
+        return jsonify({"error": error_msg}), 500
+    return render_template("500.html", ERROR_MESSAGE=error_msg)
 
 @SERVER.route("/pw_validate", methods=["POST"])
 def pw_validate():
@@ -678,10 +675,23 @@ def serve_spa(path):
 
 
 if __name__ == "__main__":
+    from flask import abort, jsonify
     from h_other import Ports
+    from constants import SERVERS as _UPLOAD_SERVERS
+    from logs_upload import CurrentUploads, UploadChunk
 
     SERVER.config["ENV"] = "development"
     SERVER.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+    _CURRENT_UPLOADS = CurrentUploads()
+    _CURRENT_UPLOADS_PROGRESS: dict = {}
+
+    def _upload_get_servers():
+        s = set(
+            p.stem for p in Directories.top.iterdir()
+            if p.suffix == ".db"
+        )
+        return sorted(s - set(_UPLOAD_SERVERS.values()))
 
     @SERVER.route('/favicon.ico')
     def favicon():
@@ -690,9 +700,70 @@ if __name__ == "__main__":
         response.cache_control.max_age = 30 * 24 * 60 * 60
         return response
 
-    @SERVER.route('/upload')
+    @SERVER.route('/upload', methods=['GET'])
     def upload():
-        _url = str(request.url).replace(f":{Ports.main}/", f":{Ports.upload}/")
-        return redirect(_url)
-    
+        return render_template("upload.html", SERVERS=_upload_get_servers())
+
+    @SERVER.route('/upload', methods=['POST'])
+    def upload_post():
+        ip = request.remote_addr or "0.0.0.0"
+        current_upload = _CURRENT_UPLOADS[ip]
+
+        if request.content_type != 'application/json':
+            data = request.get_data()
+            upload_id = request.headers.get('x-upload-id')
+            if not upload_id:
+                abort(400)
+            try:
+                chunk_id = int(request.headers.get('x-chunk', ''))
+            except (TypeError, ValueError):
+                abort(400)
+            current_upload.add_chunk(UploadChunk(data=data, chunk_id=chunk_id, upload_id=upload_id))
+            return '', 200
+
+        try:
+            file_data = request.get_json() or {}
+        except Exception:
+            file_data = {}
+        try:
+            archive = current_upload.save_uploaded_file(file_data)
+        except ValueError:
+            abort(409)
+        except OSError:
+            abort(507)
+
+        archive.start_processing()
+        _CURRENT_UPLOADS_PROGRESS[ip] = archive
+        return '', 201
+
+    def _index_and_rank(report_ids: list[str]):
+        """Calendar index + rankings DB update, run in a daemon thread after upload."""
+        logs_calendar.add_new_logs(report_ids)
+        try:
+            import logs_auto
+            failed = set(logs_auto.make_top_data(report_ids, processes=1))
+            good = [r for r in report_ids if r not in failed]
+            for server, reports in logs_auto.group_reports_by_server(good):
+                logs_auto.add_new_top_data(server, list(reports))
+        except Exception:
+            LOGGER_CONNECTIONS.exception("rankings pipeline failed after upload")
+
+    @SERVER.route('/upload_progress')
+    def upload_progress():
+        import threading
+        ip = request.remote_addr or "0.0.0.0"
+        progress = _CURRENT_UPLOADS_PROGRESS.get(ip)
+        if progress is None:
+            return '', 204
+        if progress.done == 1 and progress.slices and not getattr(progress, '_indexed', False):
+            progress._indexed = True
+            threading.Thread(
+                target=_index_and_rank,
+                args=(list(progress.slices.keys()),),
+                daemon=True,
+            ).start()
+        if not progress.thread.is_alive():
+            del _CURRENT_UPLOADS_PROGRESS[ip]
+        return jsonify(progress.status_dict)
+
     SERVER.run(host="0.0.0.0", port=Ports.main, debug=True, reloader_type="stat")
