@@ -458,6 +458,27 @@ def report_entities(report_id: str):
     return jsonify(data)
 
 
+# ─── GET /api/v2/reports/<id>/auras/ ─────────────────────────────────────────
+# Query: ?s=&f= (optional boss segment params)
+# Response: { AURA_INFO, AURA_UPTIME, AURA_COUNT, PLAYER_CLASSES }
+
+@apiv2_bp.route("/reports/<report_id>/auras/")
+def report_auras(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        data = report.auras_info_all(segments)
+        data["PLAYER_CLASSES"] = default_params["PLAYER_CLASSES"]
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(data)
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.
