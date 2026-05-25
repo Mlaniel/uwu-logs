@@ -5,12 +5,38 @@ All existing routes in Z_SERVER.py are untouched. These are additive.
 Register with: app.register_blueprint(apiv2_bp)
 """
 
+import threading
+import time
 from flask import Blueprint, jsonify, request
 
 import logs_calendar
 import logs_main
+import report_cache
 from c_bosses import BOSSES_FROM_HTML
 from c_path import Directories
+from h_server_fix import get_servers
+
+_last_rescan: float = 0.0
+_RESCAN_INTERVAL = 30.0  # seconds between background rescans
+
+
+def _maybe_rescan_logs():
+    """Trigger add_new_logs in background if there are unindexed log folders."""
+    global _last_rescan
+    now = time.monotonic()
+    if now - _last_rescan < _RESCAN_INTERVAL:
+        return
+    _last_rescan = now
+
+    df = logs_calendar.read_main_df()
+    indexed = set(df.index) if not df.empty else set()
+    on_disk = {
+        p.name
+        for p in Directories.logs.iterdir()
+        if p.is_dir()
+    }
+    if on_disk - indexed:
+        threading.Thread(target=logs_calendar.add_new_logs, daemon=True).start()
 
 apiv2_bp = Blueprint("apiv2", __name__, url_prefix="/api/v2")
 
@@ -83,8 +109,7 @@ def _load_report(report_id: str):
     if not _report_exists(report_id):
         return None, (jsonify({"error": "Report not found or has been deleted."}), 404)
     try:
-        from Z_SERVER import load_report
-        return load_report(report_id), None
+        return report_cache.open_report(report_id), None
     except Exception as exc:
         return None, (jsonify({"error": str(exc)}), 500)
 
@@ -186,10 +211,61 @@ def recent_reports():
     return jsonify(results)
 
 
+# ─── GET /api/v2/servers/ ────────────────────────────────────────────────────
+
+@apiv2_bp.route("/servers/")
+def servers():
+    """Return only servers that have an actual rankings .db file on disk,
+    preserving the preferred ordering from servers_main.json."""
+    have_db = {p.stem for p in Directories.top.iterdir() if p.suffix == ".db"}
+    ordered = [s for s in get_servers() if s in have_db]
+    return jsonify(ordered)
+
+
+_rebuild_running = False
+
+@apiv2_bp.route("/rebuild_rankings/", methods=["POST"])
+def rebuild_rankings():
+    """Trigger a one-time rankings build for all already-indexed logs.
+    Returns immediately; the build runs in a background daemon thread."""
+    global _rebuild_running
+    if _rebuild_running:
+        return jsonify({"status": "already_running"}), 202
+
+    df = logs_calendar.read_main_df()
+    if df.empty:
+        return jsonify({"status": "no_logs"}), 200
+
+    report_ids = list(df.index)
+
+    def _run():
+        global _rebuild_running
+        try:
+            import logs_auto
+            failed = set(logs_auto.make_top_data(report_ids, processes=1))
+            good = [r for r in report_ids if r not in failed]
+            for server, reports in logs_auto.group_reports_by_server(good):
+                logs_auto.add_new_top_data(server, list(reports))
+        except Exception:
+            pass
+        finally:
+            _rebuild_running = False
+
+    _rebuild_running = True
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "count": len(report_ids)}), 202
+
+
+@apiv2_bp.route("/rebuild_rankings/")
+def rebuild_rankings_status():
+    return jsonify({"running": _rebuild_running})
+
+
 # ─── GET /api/v2/logs/ ───────────────────────────────────────────────────────
 
 @apiv2_bp.route("/logs/")
 def logs():
+    _maybe_rescan_logs()
     df = logs_calendar.read_main_df()
 
     # Build server→[realm] map from the full unfiltered DF for the dropdowns
@@ -315,6 +391,29 @@ def report_deaths(report_id: str):
 
     # CLASSES/PLAYERS/GUIDS are plain dicts of strings — JSON-safe.
     # DEATHS values contain lists of lists (normalized log lines) — JSON-safe.
+    return jsonify(data)
+
+
+# ─── GET /api/v2/reports/<id>/targets/ ───────────────────────────────────────
+# Query: ?boss=<boss_html_name>  (optional)
+# Returns damage-dealt-to-target matrix: players × targets, pre-formatted.
+# Response: { TARGETS, PLAYERS_SORTED, SPECS }
+
+@apiv2_bp.route("/reports/<report_id>/targets/")
+def report_targets(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        boss_name = request.args.get("boss")
+        boss_name = BOSSES_FROM_HTML.get(boss_name, boss_name)
+        data = report.damage_to_target_all_formatted(segments, boss_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
     return jsonify(data)
 
 
