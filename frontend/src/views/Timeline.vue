@@ -16,7 +16,7 @@ const reportId = computed(() => route.params.id as string)
 const { report, loading: reportLoading, fetchOverview } = useReport()
 watch(reportId, id => fetchOverview(id), { immediate: true })
 
-const { data, rows, loading: timelineLoading, error, fetchTimeline } = useTimeline()
+const { data, rows, receivedRows, loading: timelineLoading, error, fetchTimeline } = useTimeline()
 const { data: deathData, execute: fetchDeaths } = useFetch<DeathApiResponse>()
 
 const selectedAttempt = ref<BossAttempt | null>(null)
@@ -83,13 +83,11 @@ const duration = computed(() => data.value?.RDURATION ?? 0)
 
 const ownSpellsOnly = ref(false)
 
+// When unchecked: own casts + spells cast by others on this player.
+// When checked: own casts only.
 const displayRows = computed(() => {
-  if (!ownSpellsOnly.value) return rows.value
-  const self = data.value?.NAME
-  if (!self) return rows.value
-  return rows.value
-    .map(r => ({ ...r, events: r.events.filter(ev => ev[2] === self) }))
-    .filter(r => r.events.length > 0)
+  if (ownSpellsOnly.value) return rows.value
+  return [...rows.value, ...receivedRows.value]
 })
 
 // After Vue renders new spell rows, tell the WoWhead widget to scan for new links.
@@ -368,29 +366,25 @@ const damageRouteQuery = computed(() => {
 </script>
 
 <template>
-  <div class="page-shell">
-    <!-- Sidebar -->
-    <aside class="sidebar">
+  <BasePage :loading="reportLoading" :report="report" :selected-href="selectedHref">
+    <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
-      <BasePage :loading="reportLoading" :error="null">
-        <BossSelector
-          :bosses="bosses"
-          :selected-href="selectedHref"
-          @select="selectAttempt"
-          @deselect="() => {}"
-        />
-      </BasePage>
+      <BossSelector
+        :bosses="bosses"
+        :selected-href="selectedHref"
+        @select="selectAttempt"
+        @deselect="() => {}"
+      />
       <ReportNav
         :report-id="reportId"
         :boss-query="damageRouteQuery"
         :bosses="bosses"
         :selected-href="selectedHref"
       />
-    </aside>
+    </template>
 
-    <!-- Main content -->
-    <main class="main-content">
-      <!-- Player picker -->
+    <template #default>
+      <!-- Player picker + controls -->
       <div class="controls">
         <div class="control-group">
           <label class="ctrl-label">Player</label>
@@ -415,16 +409,14 @@ const damageRouteQuery = computed(() => {
           <input type="checkbox" v-model="ownSpellsOnly" />
           Own spells only
         </label>
-        <div v-if="selectedAttempt" class="attempt-info">
-          {{ selectedAttempt.encounter_name }} —
-          {{ selectedAttempt.difficulty }} —
-          {{ selectedAttempt.attempt_type === 'kill' ? 'Kill' : `Wipe ${selectedAttempt.attempt_from_last_kill}` }}
-          ({{ selectedAttempt.duration_str }})
-        </div>
         <button v-if="zoomRange" class="zoom-reset" @click="resetZoom">Reset zoom</button>
       </div>
 
-      <BasePage :loading="timelineLoading" :error="error" :report="report" :selected-href="selectedHref">
+      <div v-if="timelineLoading" class="tl-loading">
+        <div v-for="i in 12" :key="i" class="tl-sk-row" />
+      </div>
+      <div v-else-if="error" class="tl-error">{{ error }}</div>
+      <template v-else-if="data">
         <div v-if="data" class="timeline-wrap">
           <!-- Ruler + death markers -->
           <div class="ruler-row">
@@ -480,7 +472,7 @@ const damageRouteQuery = computed(() => {
             <div class="label-col spell-label">
               <a
                 class="spell-wh-link"
-                :href="`https://www.wowhead.com/wotlk/spell=${row.spell_id}`"
+                :href="`https://www.wowhead.com/wotlk/spell=${row.spell_id.replace('recv_', '')}`"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -531,50 +523,67 @@ const damageRouteQuery = computed(() => {
             </div>
           </div>
         </div>
+      </template>
+      <p v-else-if="selectedAttempt" class="empty">
+        Select a player to load their timeline.
+      </p>
+    </template>
+  </BasePage>
 
-        <p v-else-if="!timelineLoading && selectedAttempt" class="empty">
-          Select a player to load their timeline.
-        </p>
-      </BasePage>
-
-      <!-- Floating tooltip — outside BasePage so it doesn't break v-if/v-else-if -->
-      <Teleport to="body">
-        <div
-          v-if="tooltip"
-          class="cast-tooltip"
-          :style="{ left: tooltip.x + 14 + 'px', top: tooltip.y - 10 + 'px' }"
-        >
-          <div class="tt-spell">{{ tooltip.spellName }}</div>
-          <div class="tt-row">
-            <span class="tt-label">Target</span>
-            <span>{{ tooltip.target }}</span>
-          </div>
-          <div v-if="tooltip.result" class="tt-row">
-            <span class="tt-label">Result</span>
-            <span :class="tooltip.result === 'Crit' ? 'tt-crit' : tooltip.result === 'Hit' ? '' : 'tt-miss'">{{ tooltip.result }}</span>
-          </div>
-          <div v-if="tooltip.amount" class="tt-row">
-            <span class="tt-label">Amount</span>
-            <span :class="tooltip.amount.startsWith('+') ? 'tt-heal' : tooltip.amount.startsWith('-') ? 'tt-dmg' : ''">{{ tooltip.amount }}</span>
-          </div>
-          <div class="tt-row">
-            <span class="tt-label">Time</span>
-            <span class="tt-time">{{ tooltip.time }}</span>
-          </div>
-        </div>
-      </Teleport>
-    </main>
-  </div>
+  <!-- Floating tooltip — teleported to <body> to avoid stacking-context issues -->
+  <Teleport to="body">
+    <div
+      v-if="tooltip"
+      class="cast-tooltip"
+      :style="{ left: tooltip.x + 14 + 'px', top: tooltip.y - 10 + 'px' }"
+    >
+      <div class="tt-spell">{{ tooltip.spellName }}</div>
+      <div class="tt-row">
+        <span class="tt-label">Target</span>
+        <span>{{ tooltip.target }}</span>
+      </div>
+      <div v-if="tooltip.result" class="tt-row">
+        <span class="tt-label">Result</span>
+        <span :class="tooltip.result === 'Crit' ? 'tt-crit' : tooltip.result === 'Hit' ? '' : 'tt-miss'">{{ tooltip.result }}</span>
+      </div>
+      <div v-if="tooltip.amount" class="tt-row">
+        <span class="tt-label">Amount</span>
+        <span :class="tooltip.amount.startsWith('+') ? 'tt-heal' : tooltip.amount.startsWith('-') ? 'tt-dmg' : ''">{{ tooltip.amount }}</span>
+      </div>
+      <div class="tt-row">
+        <span class="tt-label">Time</span>
+        <span class="tt-time">{{ tooltip.time }}</span>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
-.report-title {
-  padding: 10px 12px 6px;
+.tl-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 1rem 0;
+}
+
+.tl-sk-row {
+  height: 28px;
+  background: var(--surface);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.tl-error {
+  padding: 1rem 0;
+  color: var(--wipe);
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--text);
-  border-bottom: 1px solid var(--table-border);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* ── Controls ──────────────────────────────────────────────── */
@@ -636,14 +645,6 @@ const damageRouteQuery = computed(() => {
 
 .own-spells-check:hover { color: var(--text); }
 .own-spells-check input { accent-color: var(--primary); cursor: pointer; }
-
-.attempt-info {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  align-self: flex-end;
-  padding-bottom: 4px;
-}
 
 .zoom-reset {
   margin-left: auto;

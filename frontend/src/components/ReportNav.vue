@@ -64,7 +64,7 @@ function goSpell(spellId: string): void {
     <!-- Core -->
     <div class="nav-group">
       <router-link
-        :to="`/reports/${reportId}`"
+        :to="{ path: `/reports/${reportId}`, query: bossQuery }"
         class="nav-link"
         active-class=""
         exact-active-class="nav-link--active"

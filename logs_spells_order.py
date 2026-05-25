@@ -90,6 +90,7 @@ def get_delta_wrap(logs_slice, combat_start_line: str):
 def get_history(logs_slice: list[str], source_guid: str, ignored_guids: set[str], combat_start_line: str):
     flags = set()
     history = defaultdict(list)
+    received = defaultdict(list)
 
     get_delta = get_delta_wrap(logs_slice, combat_start_line)
 
@@ -97,7 +98,7 @@ def get_history(logs_slice: list[str], source_guid: str, ignored_guids: set[str]
         ignored_guids = set()
     elif source_guid in ignored_guids:
         ignored_guids.remove(source_guid)
-    
+
     for line in logs_slice:
         if source_guid not in line:
             continue
@@ -113,21 +114,20 @@ def get_history(logs_slice: list[str], source_guid: str, ignored_guids: set[str]
             tName     = parts[5]
             spell_id  = parts[6]
             etc       = parts[8] if len(parts) > 8 else ''
-            # Only keep events where the player is the SOURCE, not the target.
-            # Without this, enemy spells cast *at* the player pass the guid-in-line
-            # filter and corrupt the cast timeline with wrong CAST_START/DAMAGE pairs.
-            if sGUID != source_guid:
-                continue
             if flag in IGNORED_FLAGS:
                 continue
             _delta = get_delta(timestamp)
-            history[spell_id].append((_delta, flag, sName, tName, tGUID, etc))
+            if sGUID == source_guid:
+                history[spell_id].append((_delta, flag, sName, tName, tGUID, etc))
+            elif tGUID == source_guid:
+                received[spell_id].append((_delta, flag, sName, tName, tGUID, etc))
             flags.add(flag)
         except (ValueError, IndexError):
             continue
-    
+
     return {
         "DATA": history,
+        "RECEIVED": received,
         "FLAGS": flags,
     }
 
@@ -143,10 +143,13 @@ class Timeline(logs_base.THE_LOGS):
         data = get_history(logs_slice, guid, players_and_pets, combat_start_line)
 
         self.spell_history_combine_spells(data["DATA"])
-        
+        self.spell_history_combine_spells(data["RECEIVED"])
+
+        all_spell_ids = set(data["DATA"]) | set(data["RECEIVED"])
         data["SPELLS"] = {
             x: self.SPELLS[int(x)].to_dict()
-            for x in data["DATA"]
+            for x in all_spell_ids
+            if int(x) in self.SPELLS
         }
         data["RDURATION"] = self.get_slice_duration(s, f)
         data["NAME"] = self.guid_to_name(guid)

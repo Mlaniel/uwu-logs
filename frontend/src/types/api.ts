@@ -217,8 +217,10 @@ export type CastEvent = [number, string, string, string, string, string]
 
 // Response from POST /api/v2/reports/:id/timeline
 // DATA keys are spell_id strings; values are arrays of CastEvent.
+// RECEIVED holds events where the player was the TARGET (cast by others on the player).
 export interface TimelineApiResponse {
   DATA: Record<string, CastEvent[]>
+  RECEIVED: Record<string, CastEvent[]>
   SPELLS: Record<string, SpellInfo>
   RDURATION: number      // fight duration in seconds
   NAME: string           // player name

@@ -208,9 +208,8 @@ const displayPlayers = computed<Player[]>(() => {
 </script>
 
 <template>
-  <div class="page-shell">
-    <!-- Sidebar -->
-    <aside class="sidebar">
+  <BasePage :loading="loading" :error="error" :report="report" :selected-href="selectedHref">
+    <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
       <BossSelector
         :bosses="bosses"
@@ -224,70 +223,57 @@ const displayPlayers = computed<Player[]>(() => {
         :bosses="bosses"
         :selected-href="selectedHref"
       />
-    </aside>
+    </template>
 
-    <!-- Main content -->
-    <main class="main-content">
-      <BasePage :loading="loading" :error="error" :report="report" :selected-href="selectedHref">
-        <!-- Spec filter -->
-        <SpecFilter
-          :players="players"
-          :selected="specFilter"
-          @toggle="toggleSpec"
-        />
+    <template #default>
+      <!-- Spec filter -->
+      <SpecFilter
+        :players="players"
+        :selected="specFilter"
+        @toggle="toggleSpec"
+      />
 
-        <!-- Raid segment filter — full-raid view only -->
-        <div v-if="!selectedHref" class="raid-filter">
-          <button
-            v-for="opt in (['boss', 'all', 'trash'] as const)"
-            :key="opt"
-            class="rf-btn"
-            :class="{ active: raidFilter === opt }"
-            @click="raidFilter = opt"
-          >{{ opt === 'all' ? 'All' : opt === 'boss' ? 'Boss' : 'Trash' }}</button>
-        </div>
+      <!-- Raid segment filter — full-raid view only -->
+      <div v-if="!selectedHref" class="raid-filter">
+        <button
+          v-for="opt in (['boss', 'all', 'trash'] as const)"
+          :key="opt"
+          class="rf-btn"
+          :class="{ active: raidFilter === opt }"
+          @click="raidFilter = opt"
+        >{{ opt === 'all' ? 'All' : opt === 'boss' ? 'Boss' : 'Trash' }}</button>
+      </div>
 
-        <!-- Chart: raid summary line (full-raid) or stacked area (boss) -->
-        <DpsChart
-          :players="filteredPlayers"
-          :view="activeView"
-          :report-id="reportId"
-          :selected-href="selectedHref"
-          :raid-filter="raidFilter"
-          @range-change="onRangeChange"
-          @graph-data="onGraphData"
-          @raid-data="onRaidData"
-        />
+      <!-- Chart: raid summary line (full-raid) or stacked area (boss) -->
+      <DpsChart
+        :players="filteredPlayers"
+        :view="activeView"
+        :report-id="reportId"
+        :selected-href="selectedHref"
+        :raid-filter="raidFilter"
+        @range-change="onRangeChange"
+        @graph-data="onGraphData"
+        @raid-data="onRaidData"
+      />
 
-        <!-- Full Raid overview — below chart so chart is always the primary visual -->
-        <RaidOverview
-          v-if="!selectedHref"
-          :bosses="bosses"
-          :players="players"
-          :duration="reportDuration"
-        />
+      <!-- Full Raid overview — below chart so chart is always the primary visual -->
+      <RaidOverview
+        v-if="!selectedHref"
+        :bosses="bosses"
+        :players="players"
+        :duration="reportDuration"
+      />
 
-        <!-- Player table — receives range-derived stats when a range is active -->
-        <PlayerTable
-          :players="displayPlayers"
-          @player-click="goPlayer"
-        />
-      </BasePage>
-    </main>
-  </div>
+      <!-- Player table — receives range-derived stats when a range is active -->
+      <PlayerTable
+        :players="displayPlayers"
+        @player-click="goPlayer"
+      />
+    </template>
+  </BasePage>
 </template>
 
 <style scoped>
-.report-title {
-  padding: 10px 12px 6px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--text);
-  border-bottom: 1px solid var(--table-border);
-}
-
-
 /* ── Raid segment filter ─────────────────────────────────────────────────── */
 
 .raid-filter {

@@ -110,73 +110,87 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
 </script>
 
 <template>
-  <div class="page-shell">
-    <!-- Sidebar -->
-    <aside class="sidebar">
+  <BasePage :loading="reportLoading" :report="report" :selected-href="selectedHref">
+    <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
-      <BasePage :loading="reportLoading" :error="null">
-        <BossSelector
-          :bosses="bosses"
-          :selected-href="selectedHref"
-          @select="selectBoss"
-          @deselect="clearBoss"
-        />
-      </BasePage>
+      <BossSelector
+        :bosses="bosses"
+        :selected-href="selectedHref"
+        @select="selectBoss"
+        @deselect="clearBoss"
+      />
       <ReportNav
         :report-id="reportId"
         :boss-query="damageRouteQuery"
         :bosses="bosses"
         :selected-href="selectedHref"
       />
-    </aside>
+    </template>
 
-    <!-- Main content -->
-    <main class="main-content">
-      <BasePage :loading="reportLoading" :error="null" :report="report" :selected-href="selectedHref">
-        <!-- Class picker -->
-        <div class="controls">
-          <div class="control-group">
-            <label class="ctrl-label">Class</label>
-            <div class="class-buttons">
-              <button
-                v-for="cls in availableClasses"
-                :key="cls"
-                class="class-btn"
-                :class="{ active: selectedClass === cls }"
-                @click="selectedClass = cls"
-              >
-                {{ CLASS_DISPLAY_NAMES[cls] ?? cls }}
-              </button>
-            </div>
+    <template #default>
+      <!-- Class picker -->
+      <div class="controls">
+        <div class="control-group">
+          <label class="ctrl-label">Class</label>
+          <div class="class-buttons">
+            <button
+              v-for="cls in availableClasses"
+              :key="cls"
+              class="class-btn"
+              :class="{ active: selectedClass === cls }"
+              @click="selectedClass = cls"
+            >
+              {{ CLASS_DISPLAY_NAMES[cls] ?? cls }}
+            </button>
           </div>
         </div>
+      </div>
 
-        <BasePage :loading="compareLoading" :error="error">
-          <div v-if="data && data.PLAYERS.length" class="players-compare">
-            <div
-              v-for="player in data.PLAYERS"
-              :key="player.NAME"
-              class="player-block"
-            >
-              <h2 class="player-block-name">{{ player.SOURCE_NAME || player.NAME }}</h2>
-              <SpellTable :spells="playerSpellRows(player)" />
-            </div>
-          </div>
-          <p v-else-if="data" class="empty">No players of this class in the log.</p>
-        </BasePage>
-      </BasePage>
-    </main>
-  </div>
+      <div v-if="compareLoading" class="cmp-loading">
+        <div v-for="i in 6" :key="i" class="cmp-sk-row" />
+      </div>
+      <div v-else-if="error" class="cmp-error">{{ error }}</div>
+      <div v-else-if="data && data.PLAYERS.length" class="players-compare">
+        <div
+          v-for="player in data.PLAYERS"
+          :key="player.NAME"
+          class="player-block"
+        >
+          <h2 class="player-block-name">{{ player.SOURCE_NAME || player.NAME }}</h2>
+          <SpellTable :spells="playerSpellRows(player)" />
+        </div>
+      </div>
+      <p v-else-if="data" class="empty">No players of this class in the log.</p>
+    </template>
+  </BasePage>
 </template>
 
 <style scoped>
-.report-title {
-  padding: 10px 12px 6px;
+.cmp-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 1rem 0;
+}
+
+.cmp-sk-row {
+  height: 36px;
+  background: var(--surface);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.cmp-error {
+  padding: 1rem 0;
+  color: var(--wipe);
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--text);
-  border-bottom: 1px solid var(--table-border);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* ── Controls ──────────────────────────────────────────────── */

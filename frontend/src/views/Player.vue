@@ -98,28 +98,24 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
 </script>
 
 <template>
-  <div class="page-shell">
-    <!-- Sidebar -->
-    <aside class="sidebar">
+  <BasePage :report="report" :selected-href="selectedHref">
+    <template #sidebar>
       <div class="report-title">{{ reportTitle }}</div>
-      <BasePage :loading="reportLoading" :error="null">
-        <BossSelector
-          :bosses="bosses"
-          :selected-href="selectedHref"
-          @select="selectBoss"
-          @deselect="clearBoss"
-        />
-      </BasePage>
+      <BossSelector
+        :bosses="bosses"
+        :selected-href="selectedHref"
+        @select="selectBoss"
+        @deselect="clearBoss"
+      />
       <ReportNav
         :report-id="reportId"
         :boss-query="bossQuery"
         :bosses="bosses"
         :selected-href="selectedHref"
       />
-    </aside>
+    </template>
 
-    <!-- Main content -->
-    <main class="main-content">
+    <template #default>
       <header class="player-header">
         <router-link :to="{ path: `/reports/${reportId}`, query: bossQuery }" class="back-link">← {{ reportTitle || 'Raid' }}</router-link>
         <h1 class="player-title">{{ title }}</h1>
@@ -138,7 +134,11 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
         :selected-href="selectedHref"
       />
 
-      <BasePage :loading="loading" :error="error" :report="report" :selected-href="selectedHref">
+      <div v-if="loading" class="pl-loading">
+        <div v-for="i in 8" :key="i" class="pl-sk-row" />
+      </div>
+      <div v-else-if="error" class="pl-error">{{ error }}</div>
+      <template v-else>
         <!-- Target filter -->
         <div v-if="data?.TARGETS" class="targets-bar">
           <span class="targets-label">Filter target:</span>
@@ -157,12 +157,39 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
         </div>
 
         <SpellBarTable :spells="spellRows" :duration="fightDuration" />
-      </BasePage>
-    </main>
-  </div>
+      </template>
+    </template>
+  </BasePage>
 </template>
 
 <style scoped>
+.pl-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 1rem 0;
+}
+
+.pl-sk-row {
+  height: 36px;
+  background: var(--surface);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.pl-error {
+  padding: 1rem 0;
+  color: var(--wipe);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .player-header {
   display: flex;
   flex-direction: column;

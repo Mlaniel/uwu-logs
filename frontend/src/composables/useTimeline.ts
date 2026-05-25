@@ -23,6 +23,18 @@ export function useTimeline() {
       .sort((a, b) => b.events.length - a.events.length)
   })
 
+  const receivedRows = computed<TimelineRow[]>(() => {
+    if (!data.value?.RECEIVED) return []
+    const { RECEIVED, SPELLS } = data.value
+    return Object.entries(RECEIVED)
+      .map(([id, events]) => ({
+        spell_id: `recv_${id}`,
+        spell: SPELLS[id] ?? { id, name: id, color: '', icon: '' },
+        events,
+      }))
+      .sort((a, b) => b.events.length - a.events.length)
+  })
+
   async function fetchTimeline(
     reportId: string,
     boss: string,
@@ -37,5 +49,5 @@ export function useTimeline() {
 
   onUnmounted(abort)
 
-  return { data, rows, loading, error, fetchTimeline }
+  return { data, rows, receivedRows, loading, error, fetchTimeline }
 }
