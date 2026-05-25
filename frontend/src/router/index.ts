@@ -9,6 +9,7 @@ import Compare from '../views/Compare.vue'
 import Rankings from '../views/Rankings.vue'
 import Character from '../views/Character.vue'
 import Targets from '../views/Targets.vue'
+import Consumables from '../views/Consumables.vue'
 import NotFound from '../views/NotFound.vue'
 
 const router = createRouter({
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: '/reports/:id/timeline', component: Timeline },
     { path: '/reports/:id/compare', component: Compare },
     { path: '/reports/:id/targets', component: Targets },
+    { path: '/reports/:id/consumables', component: Consumables },
     { path: '/top', component: Rankings },
     { path: '/character', component: Character },
     { path: '/:pathMatch(.*)*', component: NotFound },

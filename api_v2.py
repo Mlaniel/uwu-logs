@@ -417,6 +417,27 @@ def report_targets(report_id: str):
     return jsonify(data)
 
 
+# ─── GET /api/v2/reports/<id>/consumables/ ───────────────────────────────────
+# Query: ?s=&f= (optional boss segment params)
+# Response: { ITEM_INFO, ITEMS_TOTAL, ITEMS, PLAYER_CLASSES }
+
+@apiv2_bp.route("/reports/<report_id>/consumables/")
+def report_consumables(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        data = report.potions_all(segments)
+        data["PLAYER_CLASSES"] = default_params["PLAYER_CLASSES"]
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(data)
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.
