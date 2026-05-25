@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from constants import SERVERS
 from c_path import Directories
+from h_other import real_ip
 from logs_upload import (
     CurrentUploads,
     LogsArchive,
@@ -24,14 +25,6 @@ class CurrentUploadsProgress(dict[str, LogsArchive]):
 
 CURRENT_UPLOADS = CurrentUploads()
 CURRENT_UPLOADS_PROGRESS = CurrentUploadsProgress()
-
-def real_ip(request: Request):
-    ip = request.client.host
-    if not ip:
-        ip = request.headers.get('x-real-ip')
-    if not ip:
-        ip = "0.0.0.0"
-    return ip
 
 def check_upload_id_header(request: Request):
     try:

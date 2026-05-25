@@ -7,7 +7,7 @@ from fastapi import (
 )
 from fastapi.templating import Jinja2Templates
 
-from api_db import DataCompressed
+from h_other import make_response_compressed_headers, real_ip
 from constants import GEAR
 from h_debug import Loggers
 from h_server_fix import get_servers
@@ -30,14 +30,6 @@ LOGGER_CONNECTIONS = Loggers.server_top
 
 def add_log_entry(ip, method, msg):
     LOGGER_CONNECTIONS.info(f"{ip:>15} | {method:<7} | {msg}")
-
-def real_ip(request: Request):
-    ip = request.client.host
-    if not ip:
-        ip = request.headers.get('x-real-ip')
-    if not ip:
-        ip = "0.0.0.0"
-    return ip
 
 async def add_log_entry_wrap(request: Request, method: str=None):
     ip = real_ip(request)
@@ -65,13 +57,6 @@ async def add_process_time_header(request: Request, call_next):
     await add_log_entry_wrap(request)
     return await call_next(request)
 
-
-def make_response_compressed_headers(z: DataCompressed):
-    response = Response(content=z.data, media_type="application/json")
-    response.headers["Content-Encoding"] = "gzip"
-    response.headers["Content-Length"] = str(z.size_compressed)
-    response.headers["Content-Length-Full"] = str(z.size)
-    return response
 
 @app.post('/top_points')
 async def top_post(request: Request, data: PointsValidation):

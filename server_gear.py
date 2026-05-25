@@ -9,7 +9,7 @@ from fastapi import (
 )
 
 import parser_all
-from api_db import DataCompressed
+from h_other import make_response_compressed_headers, real_ip
 from top_gear import GearDB
 from h_debug import Loggers
 
@@ -23,14 +23,6 @@ LOGGER = Loggers.server_gear
 
 def add_log_entry(ip, method, msg):
     LOGGER.info(f"{ip:>15} | {method:<7} | {msg}")
-
-def real_ip(request: Request):
-    ip = request.client.host
-    if not ip:
-        ip = request.headers.get('x-real-ip')
-    if not ip:
-        ip = "0.0.0.0"
-    return ip
 
 def request_format(request: Request):
     try:
@@ -53,13 +45,6 @@ def add_log_entry_wrap(request: Request, method: str=None):
 async def log_connection(request: Request, call_next):
     add_log_entry_wrap(request)
     return await call_next(request)
-
-def make_response_compressed_headers(z: DataCompressed):
-    response = Response(content=z.data, media_type="application/json")
-    response.headers["Content-Encoding"] = "gzip"
-    response.headers["Content-Length"] = str(z.size_compressed)
-    response.headers["Content-Length-Full"] = str(z.size)
-    return response
 
 @app.get('/gear/{server}/{player_name}')
 def rank(server: str, player_name: str):

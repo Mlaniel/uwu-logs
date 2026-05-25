@@ -1,5 +1,8 @@
 import time
 import requests
+from fastapi import Request, Response
+
+from api_db import DataCompressed
 
 NIL_GUID = '0x0000000000000000'
 REPORT_NAME_STRUCTURE = ("date", "time", "author", "server")
@@ -21,6 +24,21 @@ def requests_get(page_url, headers, timeout=2, attempts=3):
             time.sleep(2)
     
     return None
+
+def real_ip(request: Request):
+    ip = request.client.host
+    if not ip:
+        ip = request.headers.get('x-real-ip')
+    if not ip:
+        ip = "0.0.0.0"
+    return ip
+
+def make_response_compressed_headers(z: DataCompressed):
+    response = Response(content=z.data, media_type="application/json")
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(z.size_compressed)
+    response.headers["Content-Length-Full"] = str(z.size)
+    return response
 
 def get_report_name_info(report_id: str):
     _report_id = report_id.split('--')
