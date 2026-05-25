@@ -7,8 +7,8 @@
     <div class="nav-links">
       <router-link to="/" class="nav-item">My Logs</router-link>
       <router-link to="/logs" class="nav-item">Raid Logs</router-link>
-      <a href="/top" class="nav-item">Rankings</a>
-      <a href="/character" class="nav-item">Characters</a>
+      <router-link to="/top" class="nav-item">Rankings</router-link>
+      <router-link to="/character" class="nav-item">Characters</router-link>
     </div>
   </nav>
   <RouterView />

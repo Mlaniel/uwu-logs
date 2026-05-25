@@ -117,6 +117,8 @@ class UploadProgress extends XMLHttpRequest {
     const response_json = JSON.parse(this.response);
     if (response_json.done != 1) {
       setTimeout(() => this.get_progress(), 250);
+    } else {
+      setTimeout(() => { window.location.href = '/logs'; }, 3000);
     }
     new_status_msg(response_json.status);
     add_parsed_slices(response_json.slices);

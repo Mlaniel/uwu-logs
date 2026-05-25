@@ -1,6 +1,7 @@
 import calendar
 import json
 import shutil
+import threading
 from collections import defaultdict
 from datetime import datetime
 
@@ -63,11 +64,14 @@ def read_main_df() -> pandas.DataFrame:
 def _save_df(df: pandas.DataFrame, path, comp=None):
     df.to_pickle(path, compression=comp)
 
+_DF_WRITE_LOCK = threading.Lock()
+
 def _save_df_with_backup(df: pandas.DataFrame):
-    if DF_MAIN_PATH.is_file():
-        shutil.copy2(DF_MAIN_PATH, PATH_BKP)
-    _save_df(df, PATH_TMP)
-    PATH_TMP.replace(DF_MAIN_PATH)
+    with _DF_WRITE_LOCK:
+        if DF_MAIN_PATH.is_file():
+            shutil.copy2(DF_MAIN_PATH, PATH_BKP)
+        _save_df(df, PATH_TMP)
+        PATH_TMP.replace(DF_MAIN_PATH)
 
 ##################################################################
 
@@ -187,18 +191,11 @@ def report_data(report_id: str):
 def make_new(report_ids: list[str]):
     if not report_ids:
         return
-    
+
     data = {}
     for report_id in report_ids:
         logs_dir = Directories.logs / report_id
-        needed_files = (
-            file_path.is_file()
-            for file_path in [
-                logs_dir / "PLAYERS_DATA.json",
-                logs_dir / "ENCOUNTER_DATA.json",
-            ]
-        )
-        if not all(needed_files):
+        if not logs_dir.is_dir():
             continue
 
         try:
@@ -217,7 +214,7 @@ def _get_default_server(name: str):
 
 def add_new_logs(new_reports: list[str]=None):
     if new_reports is None:
-        new_reports = Directories.logs.iterdir()
+        new_reports = [p.name for p in Directories.logs.iterdir() if p.is_dir()]
     new_reports = set(new_reports)
     
     df = read_main_df()
