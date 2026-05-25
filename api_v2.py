@@ -588,6 +588,26 @@ def report_ucm(report_id: str):
     })
 
 
+# ─── GET /api/v2/reports/<id>/toc-valks/ ─────────────────────────────────────
+# Uses first segment only (same as Flask).
+# Response: { TARGETS, ATTEMPT_DATA, SPECS }
+
+@apiv2_bp.route("/reports/<report_id>/toc-valks/")
+def report_toc_valks(report_id: str):
+    report, err = _load_report(report_id)
+    if err:
+        return err
+
+    try:
+        default_params = report.get_default_params(request)
+        segments = default_params["SEGMENTS"]
+        data = report.parse_shields_casts_wrap(*segments[0])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(data)
+
+
 # ─── POST /api/v2/reports/<id>/timeline ──────────────────────────────────────
 # Body: { "boss": "<boss_html_name>", "attempt": <n>, "name": "<player_name>" }
 # Returns JSON from get_spell_history_wrap_json — already serialized.
