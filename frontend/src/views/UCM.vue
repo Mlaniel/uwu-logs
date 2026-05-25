@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import type { BossAttempt } from '../types/api'
 
 interface SpecInfo {
@@ -111,16 +112,19 @@ const tooltipFields = ['actual', 'overkill', 'pets'] as const
 <template>
   <BasePage :title="reportTitle || 'UCM'" :loading="loading" :error="error ?? undefined">
     <template #sidebar>
+      <div class="report-title">{{ reportTitle }}</div>
       <BossSelector
         :bosses="bosses"
         :selected-href="selectedHref"
         @select="selectBoss"
-        @clear="clearBoss"
+        @deselect="clearBoss"
       />
-      <nav class="sidebar-nav">
-        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link">Damage</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/ucm`, query: bossQuery }" class="sidebar-nav-link">UCM</router-link>
-      </nav>
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="bossQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </template>
 
     <template #default>

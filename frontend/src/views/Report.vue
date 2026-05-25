@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { useFilters } from '../composables/useFilters'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import SpecFilter from '../components/SpecFilter.vue'
 import DpsChart from '../components/DpsChart.vue'
 import RaidOverview from '../components/RaidOverview.vue'
@@ -217,11 +218,12 @@ const displayPlayers = computed<Player[]>(() => {
         @select="selectBoss"
         @deselect="clearBoss"
       />
-      <nav class="sidebar-nav">
-        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/timeline`, query: bossQuery }" class="sidebar-nav-link">Timeline</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/compare`, query: bossQuery }" class="sidebar-nav-link">Compare</router-link>
-      </nav>
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="bossQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </aside>
 
     <!-- Main content -->

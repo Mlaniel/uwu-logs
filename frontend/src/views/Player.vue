@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { usePlayer } from '../composables/usePlayer'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import DpsChart from '../components/DpsChart.vue'
 import SpellBarTable from '../components/SpellBarTable.vue'
 import type { BossAttempt } from '../types/api'
@@ -109,11 +110,12 @@ const title = computed(() => data.value?.SOURCE_NAME ?? playerName.value)
           @deselect="clearBoss"
         />
       </BasePage>
-      <nav class="sidebar-nav">
-        <router-link :to="{ path: `/reports/${reportId}`, query: bossQuery }" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/timeline`, query: bossQuery }" class="sidebar-nav-link">Timeline</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/compare`, query: bossQuery }" class="sidebar-nav-link">Compare</router-link>
-      </nav>
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="bossQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </aside>
 
     <!-- Main content -->

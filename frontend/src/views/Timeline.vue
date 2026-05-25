@@ -6,6 +6,7 @@ import { useTimeline } from '../composables/useTimeline'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import type { BossAttempt, DeathApiResponse, CastEvent } from '../types/api'
 
 const route = useRoute()
@@ -379,11 +380,12 @@ const damageRouteQuery = computed(() => {
           @deselect="() => {}"
         />
       </BasePage>
-      <nav class="sidebar-nav">
-        <router-link :to="{ path: `/reports/${reportId}`, query: damageRouteQuery }" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
-        <router-link :to="`/reports/${reportId}/timeline`" class="sidebar-nav-link">Timeline</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/compare`, query: damageRouteQuery }" class="sidebar-nav-link">Compare</router-link>
-      </nav>
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="damageRouteQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </aside>
 
     <!-- Main content -->

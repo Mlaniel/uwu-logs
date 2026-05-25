@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
+import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
+import type { BossAttempt } from '../types/api'
 
 interface EntitiesApiResponse {
   ENTITIES: Record<string, [string, string][]>
@@ -16,6 +19,21 @@ const { report, loading: reportLoading, fetchOverview } = useReport()
 watch(reportId, id => fetchOverview(id), { immediate: true })
 
 const reportTitle = computed(() => report.value?.REPORT_NAME ?? '')
+const bosses = computed(() => report.value?.SEGMENTS_LINKS ?? [])
+
+const selectedHref = ref('')
+const bossQuery = computed(() =>
+  selectedHref.value
+    ? Object.fromEntries(new URLSearchParams(selectedHref.value.slice(1)))
+    : {}
+)
+
+function selectBoss(attempt: BossAttempt): void {
+  selectedHref.value = attempt.href
+}
+function clearBoss(): void {
+  selectedHref.value = ''
+}
 
 const { data, loading: dataLoading, error, execute } = useFetch<EntitiesApiResponse>()
 
@@ -35,10 +53,19 @@ const categories = computed<string[]>(() =>
 <template>
   <BasePage :title="reportTitle || 'Entities'" :loading="loading" :error="error ?? undefined">
     <template #sidebar>
-      <nav class="sidebar-nav">
-        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link">Damage</router-link>
-        <router-link :to="`/reports/${reportId}/entities`" class="sidebar-nav-link">Entities</router-link>
-      </nav>
+      <div class="report-title">{{ reportTitle }}</div>
+      <BossSelector
+        :bosses="bosses"
+        :selected-href="selectedHref"
+        @select="selectBoss"
+        @deselect="clearBoss"
+      />
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="bossQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </template>
 
     <template #default>

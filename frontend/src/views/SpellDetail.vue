@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import type { BossAttempt } from '../types/api'
 
 interface SpellApiResponse {
@@ -89,11 +90,18 @@ const pageTitle = computed(() =>
 <template>
   <BasePage :title="reportTitle || pageTitle" :loading="loading" :error="error ?? undefined">
     <template #sidebar>
+      <div class="report-title">{{ reportTitle }}</div>
       <BossSelector
         :bosses="bosses"
         :selected-href="selectedHref"
         @select="selectBoss"
-        @clear="clearBoss"
+        @deselect="clearBoss"
+      />
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="bossQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
       />
     </template>
 

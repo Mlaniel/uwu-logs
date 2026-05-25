@@ -18,6 +18,7 @@ import LadySpirits from '../views/LadySpirits.vue'
 import UCM from '../views/UCM.vue'
 import TocValks from '../views/TocValks.vue'
 import SpellDetail from '../views/SpellDetail.vue'
+import Deaths from '../views/Deaths.vue'
 import NotFound from '../views/NotFound.vue'
 
 const router = createRouter({
@@ -40,6 +41,7 @@ const router = createRouter({
     { path: '/reports/:id/ucm', component: UCM },
     { path: '/reports/:id/toc-valks', component: TocValks },
     { path: '/reports/:id/spell/:spell_id', component: SpellDetail },
+    { path: '/reports/:id/deaths', component: Deaths },
     { path: '/top', component: Rankings },
     { path: '/character', component: Character },
     { path: '/:pathMatch(.*)*', component: NotFound },

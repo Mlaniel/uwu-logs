@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import type { BossAttempt } from '../types/api'
 
 interface ItemInfo {
@@ -90,19 +91,19 @@ function itemCount(spellId: string, player: string): string {
 <template>
   <BasePage :title="reportTitle || 'Consumables'" :loading="loading" :error="error ?? undefined">
     <template #sidebar>
+      <div class="report-title">{{ reportTitle }}</div>
       <BossSelector
         :bosses="bosses"
         :selected-href="selectedHref"
         @select="selectBoss"
-        @clear="clearBoss"
+        @deselect="clearBoss"
       />
-      <nav class="sidebar-nav">
-        <router-link :to="`/reports/${reportId}`" class="sidebar-nav-link">Damage</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/targets`, query: bossQuery }" class="sidebar-nav-link">Targets</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/consumables`, query: bossQuery }" class="sidebar-nav-link">Consumables</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/timeline`, query: bossQuery }" class="sidebar-nav-link">Timeline</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/compare`, query: bossQuery }" class="sidebar-nav-link">Compare</router-link>
-      </nav>
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="bossQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </template>
 
     <template #default>

@@ -221,6 +221,21 @@ td.number,
   }
 }
 
+/* ─── Sidebar report title ──────────────────────────────────────────────── */
+
+.report-title {
+  padding: 10px 12px 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  border-bottom: 1px solid var(--table-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
 /* ─── Sidebar nav links (Timeline / Compare / etc.) ────────────────────── */
 
 .sidebar-nav {

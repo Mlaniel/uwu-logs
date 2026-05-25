@@ -1,21 +1,26 @@
 <script setup lang="ts">
 defineProps<{
+  title?: string
   loading?: boolean
   error?: string | null
 }>()
 </script>
 
 <template>
-  <div v-if="error" class="base-error">
-    <span>{{ error }}</span>
-  </div>
+  <div class="page-shell">
+    <aside v-if="$slots.sidebar" class="sidebar">
+      <slot name="sidebar" />
+    </aside>
 
-  <div v-else-if="loading" class="base-skeleton">
-    <div class="skeleton sk-title" />
-    <div class="skeleton sk-row" v-for="i in 8" :key="i" />
+    <main class="main-content">
+      <div v-if="error" class="base-error">{{ error }}</div>
+      <div v-else-if="loading" class="base-skeleton">
+        <div class="skeleton sk-title" />
+        <div v-for="i in 8" :key="i" class="skeleton sk-row" />
+      </div>
+      <slot v-else />
+    </main>
   </div>
-
-  <slot v-else />
 </template>
 
 <style scoped>

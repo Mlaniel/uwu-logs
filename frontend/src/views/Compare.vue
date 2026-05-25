@@ -5,6 +5,7 @@ import { useReport } from '../composables/useReport'
 import { useFetch } from '../composables/useFetch'
 import BasePage from '../components/BasePage.vue'
 import BossSelector from '../components/BossSelector.vue'
+import ReportNav from '../components/ReportNav.vue'
 import SpellTable from '../components/SpellTable.vue'
 import { CLASS_DISPLAY_NAMES } from '../constants/bosses'
 import type { BossAttempt, SpellRow, SpellInfo } from '../types/api'
@@ -121,11 +122,12 @@ function playerSpellRows(player: ComparePlayer): SpellRow[] {
           @deselect="clearBoss"
         />
       </BasePage>
-      <nav class="sidebar-nav">
-        <router-link :to="{ path: `/reports/${reportId}`, query: damageRouteQuery }" class="sidebar-nav-link" active-class="" exact-active-class="router-link-exact-active">Damage</router-link>
-        <router-link :to="{ path: `/reports/${reportId}/timeline`, query: damageRouteQuery }" class="sidebar-nav-link">Timeline</router-link>
-        <router-link :to="`/reports/${reportId}/compare`" class="sidebar-nav-link">Compare</router-link>
-      </nav>
+      <ReportNav
+        :report-id="reportId"
+        :boss-query="damageRouteQuery"
+        :bosses="bosses"
+        :selected-href="selectedHref"
+      />
     </aside>
 
     <!-- Main content -->
