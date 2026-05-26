@@ -131,8 +131,9 @@ const columns = [
     meta: { cls: 'col-val gs' },
     cell: ({ row }) => {
       const p   = row.original
-      const pct = p.useful?.percent ?? 0
-      return h('span', { class: rankClass(pct) }, p.useful?.value || p.damage.value || '—')
+      const src = p.useful ?? p.damage
+      const pct = src.percent
+      return h('span', { class: rankClass(pct) }, src.value || '—')
     },
     sortingFn: healerSortFn,
   }),
@@ -143,7 +144,7 @@ const columns = [
     meta: { cls: 'col-bar', noHide: true },
     cell: ({ row }) => {
       const p   = row.original
-      const pct = p.useful?.percent ?? 0
+      const pct = (p.useful ?? p.damage).percent
       return h('div', {
         class: 'bar-fill',
         style: { width: pct + '%', background: rankBarColor(pct) },
