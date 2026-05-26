@@ -51,7 +51,7 @@ class DB_Index:
 class Cursors(dict[str, sqlite3.Connection]):
     def __missing__(self, path: PathExt):
         LOGGER.debug(f">>> DB OPEN | {path}")
-        v = self[path] = sqlite3.connect(path)
+        v = self[path] = sqlite3.connect(path, check_same_thread=False)
         return v
 
 

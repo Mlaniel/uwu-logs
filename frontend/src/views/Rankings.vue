@@ -18,7 +18,6 @@ const BOSSES: Record<string, string[]> = {
   "Trial of the Crusader": ["Anub'arak", "Northrend Beasts", "Lord Jaraxxus", "Faction Champions", "Twin Val'kyr"],
   "Vault of Archavon": ["Toravon the Ice Watcher", "Archavon the Stone Watcher", "Emalon the Storm Watcher", "Koralon the Flame Watcher"],
   "Onyxia's Lair": ["Onyxia"],
-  "The Eye of Eternity": ["Malygos"],
   "The Obsidian Sanctum": ["Sartharion"],
   "Ulduar": [
     "Ignis the Furnace Master", "Razorscale", "XT-002 Deconstructor",
@@ -118,7 +117,7 @@ const servers = ref<string[]>([])
 const selectedServer = ref(qStr('server', ''))
 const selectedRaid = ref(qStr('raid', DEFAULT_RAID))
 const selectedBoss = ref(qStr('boss', DEFAULT_BOSS))
-const selectedMode = ref(qStr('mode', '25H'))
+const selectedMode = ref(qStr('mode', '25N'))
 const selectedClass = ref(qStr('class', 'All'))
 const selectedSpec = ref(qStr('spec', 'All'))
 const bestOnly = ref(qBool('best', true))
