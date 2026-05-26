@@ -213,6 +213,7 @@ const queryKey = computed(() => {
 // ── Watchers ──────────────────────────────────────────────────────────────────
 
 watch(selInstance, () => {
+  rows.value = []
   selBoss.value = bossList.value[0] ?? ''
   if (mode.value === 'points') {
     if (selClass.value < 0) selClass.value = 0
@@ -668,14 +669,16 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
       <table v-else-if="mode === 'points' && rows.length" class="top-table">
         <thead>
           <tr>
+            <th class="col-rank">#</th>
             <th class="col-n">Name</th>
-            <th class="col-pts">%</th>
-            <th class="col-pts">Total</th>
+            <th class="col-pts" title="Score relative to rank 1 (100 = best)">Score</th>
+            <th class="col-pts" title="Total accumulated points">Points</th>
           </tr>
         </thead>
         <tbody>
           <!-- row: [name, p_relative, p_total] -->
           <tr v-for="(row, i) in rows" :key="i" class="data-row">
+            <td class="col-rank">{{ i + 1 }}</td>
             <td class="col-n">
               <img
                 class="spec-icon"
@@ -689,8 +692,10 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
                 target="_blank"
               >{{ row[0] }}</a>
             </td>
-            <td class="col-pts" :class="rankClass(row[1])">{{ Number(row[1]).toFixed(2) }}</td>
-            <td class="col-pts">{{ Math.floor(row[2]) }}</td>
+            <td class="col-pts" :class="isFinite(row[1]) ? rankClass(row[1]) : ''">
+              {{ isFinite(row[1]) ? Number(row[1]).toFixed(2) : '—' }}
+            </td>
+            <td class="col-pts">{{ isFinite(row[2]) ? fmtNum(row[2]) : '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -928,6 +933,16 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
 .col-aura.has-aura {
   cursor: pointer;
   color: var(--text);
+}
+
+.col-rank {
+  width: 36px;
+  text-align: right;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding-right: 8px !important;
 }
 
 .col-faction { width: 20px; padding-right: 0 !important; }
