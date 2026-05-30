@@ -181,7 +181,9 @@ const specList = computed(() =>
 )
 
 const hasHeroic = computed(() =>
-  RAID_WITH_HEROIC.has(selInstance.value) || BOSS_WITH_HEROIC.has(selBoss.value)
+  mode.value === 'speedrun' ||
+  RAID_WITH_HEROIC.has(selInstance.value) ||
+  BOSS_WITH_HEROIC.has(selBoss.value)
 )
 
 const difficulty = computed(() =>
@@ -206,7 +208,7 @@ const queryKey = computed(() => {
   }
   return JSON.stringify({
     t: 'speedrun', server: selServer.value, raid: selBoss.value,
-    sort_by: speedrunSortCol.value,
+    mode: difficulty.value, sort_by: speedrunSortCol.value,
   })
 })
 
@@ -329,7 +331,7 @@ async function fetchRankings() {
       body = { server: selServer.value, class_i: selClass.value, spec_i: selSpec.value }
     } else {
       url  = '/top_speedrun'
-      body = { server: selServer.value, raid: selBoss.value, sort_by: speedrunSortCol.value }
+      body = { server: selServer.value, raid: selBoss.value, mode: difficulty.value, sort_by: speedrunSortCol.value }
     }
 
     const res = await fetch(url, {
@@ -508,11 +510,11 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
             <option v-for="b in bossList" :key="b" :value="b">{{ b }}</option>
           </select>
 
-          <!-- Size (DPS only) -->
+          <!-- Size (DPS + Speedrun) -->
           <select
             v-model="selSize"
             class="ctrl-sel ctrl-sm"
-            :disabled="mode !== 'dps'"
+            :disabled="mode === 'points'"
             @change="saveStorage"
           >
             <option value="25">25</option>
@@ -520,11 +522,11 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
           </select>
 
           <!-- Heroic checkbox -->
-          <label class="ctrl-check" :class="{ disabled: !hasHeroic || mode !== 'dps' }">
+          <label class="ctrl-check" :class="{ disabled: !hasHeroic }">
             <input
               type="checkbox"
               v-model="heroic"
-              :disabled="!hasHeroic || mode !== 'dps'"
+              :disabled="!hasHeroic"
               @change="saveStorage"
             />
             Heroic

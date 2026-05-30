@@ -81,6 +81,54 @@ def make_report_speedrun_wrap(report_name: str, rewrite=False):
         LOGGER.exception(f'{get_ms_str(pc)} | {report_name:50} | Speedrun error')
 
 
+def backfill(server: str = None, rewrite=False):
+    """
+    Process all existing reports that have top.json and generate speedrun.json.
+    Then write all results to the SpeedrunDB.
+    Run manually: python logs_speedrun.py
+    """
+    import top_speedrun
+    from collections import defaultdict
+
+    reports_dir = Directories.logs
+    if not reports_dir.is_dir():
+        print("No logs directory found")
+        return
+
+    all_reports = [
+        d.name
+        for d in reports_dir.iterdir()
+        if d.is_dir() and (d / "top.json").is_file()
+    ]
+    if server:
+        all_reports = [r for r in all_reports if r.endswith(f"--{server}")]
+
+    print(f"Processing {len(all_reports)} reports…")
+    for report_name in sorted(all_reports):
+        make_report_speedrun_wrap(report_name, rewrite=rewrite)
+
+    # Group by server and write to DB
+    by_server: dict[str, list] = defaultdict(list)
+    for report_name in all_reports:
+        speedrun_path = Directories.logs.joinpath(report_name, FileNames.logs_speedrun)
+        if not speedrun_path.is_file():
+            continue
+        srv = report_name.rsplit("--", 1)[-1]
+        by_server[srv].append(report_name)
+
+    for srv, reports in by_server.items():
+        _data: dict[str, list] = defaultdict(list)
+        for report_name in reports:
+            speedrun_path = Directories.logs.joinpath(report_name, FileNames.logs_speedrun)
+            for table_name, row in speedrun_path.json().items():
+                _data[table_name].append(row)
+        if _data:
+            db = top_speedrun.SpeedrunDB(srv, new=True)
+            for table_name, rows in _data.items():
+                db.add_new_data(table_name, rows)
+            print(f"  Written {sum(len(v) for v in _data.values())} speedrun entries for {srv}")
+
+
 def _test():
     from pprint import pprint
     report_name = "24-05-10--21-04--Jengo--Lordaeron"
@@ -88,4 +136,12 @@ def _test():
 
 
 if __name__ == "__main__":
-    _test()
+    import sys
+    if "--backfill" in sys.argv:
+        server_arg = None
+        for arg in sys.argv:
+            if arg.startswith("--server="):
+                server_arg = arg.split("=", 1)[1]
+        backfill(server=server_arg, rewrite="--rewrite" in sys.argv)
+    else:
+        _test()

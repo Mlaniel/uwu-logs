@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from collections import defaultdict
 
 from pydantic import BaseModel, field_validator
@@ -136,7 +137,10 @@ class Speedrun(SpeedrunDB, Cache):
         return DataCompressed(jb)
     
     def _new_data(self):
-        return self.cursor.execute(self.query)
+        try:
+            return self.cursor.execute(self.query)
+        except sqlite3.OperationalError:
+            return []
 
 
 def test1():
