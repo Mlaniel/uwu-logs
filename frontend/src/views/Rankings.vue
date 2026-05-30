@@ -163,8 +163,11 @@ const tooltipRight  = ref(0)
 let tooltipHideTimer: ReturnType<typeof setTimeout> | null = null
 
 // Request dedup / cache
-const reqCache = new Map<string, any[]>()
+const reqCache = new Map<string, any>()
 let   abortCtrl: AbortController | null = null
+
+// Speedrun boss grid: { boss_name: [[report_id, duration], ...] }
+const speedrunData = ref<Record<string, [string, number][]>>({})
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 
@@ -208,7 +211,7 @@ const queryKey = computed(() => {
   }
   return JSON.stringify({
     t: 'speedrun', server: selServer.value, raid: selBoss.value,
-    mode: difficulty.value, sort_by: speedrunSortCol.value,
+    mode: difficulty.value, class_i: selClass.value,
   })
 })
 
@@ -302,7 +305,9 @@ async function fetchRankings() {
 
   // Cache hit
   if (reqCache.has(key)) {
-    rows.value = reqCache.get(key)!
+    const cached = reqCache.get(key)
+    if (mode.value === 'speedrun') speedrunData.value = cached
+    else rows.value = cached
     error.value = ''
     return
   }
@@ -310,9 +315,10 @@ async function fetchRankings() {
   abortCtrl?.abort()
   abortCtrl = new AbortController()
 
-  loading.value = true
-  error.value   = ''
-  rows.value    = []
+  loading.value    = true
+  error.value      = ''
+  rows.value       = []
+  speedrunData.value = {}
 
   try {
     let url: string
@@ -331,7 +337,7 @@ async function fetchRankings() {
       body = { server: selServer.value, class_i: selClass.value, spec_i: selSpec.value }
     } else {
       url  = '/top_speedrun'
-      body = { server: selServer.value, raid: selBoss.value, mode: difficulty.value, sort_by: speedrunSortCol.value }
+      body = { server: selServer.value, raid: selBoss.value, mode: difficulty.value, class_i: selClass.value }
     }
 
     const res = await fetch(url, {
@@ -348,9 +354,15 @@ async function fetchRankings() {
     }
 
     const data = await res.json()
-    const parsed: any[][] = Array.isArray(data) ? data : []
-    reqCache.set(key, parsed)
-    rows.value = parsed
+    if (mode.value === 'speedrun') {
+      const parsed = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {}
+      reqCache.set(key, parsed)
+      speedrunData.value = parsed
+    } else {
+      const parsed: any[][] = Array.isArray(data) ? data : []
+      reqCache.set(key, parsed)
+      rows.value = parsed
+    }
   } catch (e: any) {
     if (e?.name !== 'AbortError') error.value = e?.message ?? 'Unknown error'
   } finally {
@@ -536,7 +548,7 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
           <select
             v-model.number="selClass"
             class="ctrl-sel"
-            :disabled="mode === 'speedrun'"
+            :disabled="mode === 'points'"
             @change="saveStorage"
           >
             <option v-if="mode !== 'points'" :value="-1">All classes</option>
@@ -547,7 +559,7 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
           <select
             v-model.number="selSpec"
             class="ctrl-sel"
-            :disabled="mode === 'speedrun' || selClass < 0"
+            :disabled="mode !== 'dps' || selClass < 0"
             @change="saveStorage"
           >
             <option v-if="mode !== 'points'" :value="-1">All specs</option>
@@ -586,7 +598,7 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
       <!-- ── Status ────────────────────────────────────────────────────── -->
       <div v-if="loading" class="status-msg">Loading…</div>
       <div v-else-if="error" class="status-msg err">{{ error }}</div>
-      <div v-else-if="!loading && !rows.length && servers.length" class="status-msg">No data</div>
+      <div v-else-if="!loading && !rows.length && !Object.keys(speedrunData).length && servers.length" class="status-msg">No data</div>
 
       <!-- ── DPS Table ─────────────────────────────────────────────────── -->
       <table v-if="mode === 'dps' && rows.length" class="top-table">
@@ -702,46 +714,40 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
         </tbody>
       </table>
 
-      <!-- ── Speedrun Table ─────────────────────────────────────────────── -->
-      <table v-else-if="mode === 'speedrun' && rows.length" class="top-table speedrun-table">
-        <thead>
-          <tr>
-            <th class="col-n" colspan="2">Guild</th>
-            <th
-              id="head-speedrun-total-length"
-              class="col-dur sortable"
-              :class="{ sorted: speedrunSortCol === 'head-speedrun-total-length' }"
-              @click="sortSpeedrun('head-speedrun-total-length')"
-            >Total</th>
-            <th
-              id="head-speedrun-segments-sum"
-              class="col-dur sortable"
-              :class="{ sorted: speedrunSortCol === 'head-speedrun-segments-sum' }"
-              @click="sortSpeedrun('head-speedrun-segments-sum')"
-            >Segments</th>
-            <th class="col-date">Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- row: [report_id, total_length, segments_sum, guild_name, faction] -->
-          <tr v-for="(row, i) in rows" :key="i" class="data-row">
-            <td class="col-faction">
-              <img
-                v-if="FACTION_ICONS[row[4]] != null"
-                :src="FACTION_ICONS[row[4]]"
-                width="16" height="16"
-                :alt="row[4] === 0 ? 'Alliance' : 'Horde'"
-              />
-            </td>
-            <td class="col-guild">{{ row[3] }}</td>
-            <td class="col-dur">{{ fmtDurationHours(row[1]) }}</td>
-            <td class="col-dur">{{ fmtDurationHours(row[2]) }}</td>
-            <td class="col-date">
-              <a :href="`/reports/${row[0]}--${selServer}`" target="_blank">{{ fmtDate(row[0]) }}</a>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- ── Speedrun Boss Grid ────────────────────────────────────────── -->
+      <div v-else-if="mode === 'speedrun' && Object.keys(speedrunData).length" class="sr-grid">
+        <div
+          v-for="(kills, bossName) in speedrunData"
+          :key="bossName"
+          class="sr-card"
+        >
+          <div class="sr-card-title">{{ bossName }}</div>
+          <table class="sr-table">
+            <thead>
+              <tr>
+                <th class="sr-th-rank">#</th>
+                <th class="sr-th-dur">Time</th>
+                <th class="sr-th-date">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!kills.length">
+                <td colspan="3" class="sr-empty">—</td>
+              </tr>
+              <!-- row: [report_id, duration_sec] -->
+              <tr v-for="(row, i) in kills" :key="i" class="sr-row">
+                <td class="sr-td-rank">{{ i + 1 }}</td>
+                <td class="sr-td-dur">{{ fmtDuration(row[1]) }}</td>
+                <td class="sr-td-date">
+                  <a :href="`/reports/${row[0]}--${selServer}/`" target="_blank">
+                    {{ fmtDate(row[0]) }}
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ── Aura Tooltip ───────────────────────────────────────────────── -->
@@ -1000,4 +1006,79 @@ const pointsSpecIndex = computed(() => selClass.value * 4 + selSpec.value)
 
 .tip-count  { text-align: right; color: var(--text); }
 .tip-uptime { text-align: right; color: var(--text-muted); min-width: 50px; }
+
+/* ── Speedrun boss grid ───────────────────────────────────────────── */
+.sr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.sr-card {
+  background: var(--surface);
+  border: 1px solid var(--table-border);
+  padding: 8px 0 4px;
+}
+
+.sr-card-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--table-border);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.sr-table th {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  text-align: left;
+}
+
+.sr-th-rank  { width: 20px; text-align: center; }
+.sr-th-dur   { text-align: right; }
+.sr-th-date  { text-align: right; }
+
+.sr-row {
+  height: 26px;
+  border-top: 1px solid var(--table-border);
+}
+
+.sr-row:hover { background: var(--hover-row); }
+
+.sr-row td { padding: 0 8px; }
+
+.sr-td-rank  { color: var(--text-muted); text-align: center; font-size: 0.6875rem; }
+.sr-td-dur   { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.sr-td-date  { text-align: right; }
+.sr-td-date a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.6875rem;
+}
+.sr-td-date a:hover { color: var(--text); text-decoration: underline; }
+
+.sr-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 8px;
+  font-size: 0.75rem;
+}
 </style>

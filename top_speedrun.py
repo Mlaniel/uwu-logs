@@ -5,13 +5,13 @@ from collections import defaultdict
 from pydantic import BaseModel, field_validator
 
 from api_db import (
-    Cache,
     DB,
     DataCompressed,
     Table,
 )
+from api_top_db_v2 import TopDB
 from c_path import Directories, StrEnum
-from h_debug import running_time
+from c_server_phase import get_server_phase
 from h_server_fix import get_servers
 
 
@@ -23,6 +23,10 @@ API_EXAMPLES = [
     },
 ]
 
+TOP_N = 10
+
+
+# ── SpeedrunDB (full-raid-clear pipeline storage) ─────────────────────────────
 
 class Columns(StrEnum):
     REPORT_ID = "report_id"
@@ -30,11 +34,6 @@ class Columns(StrEnum):
     SEGMENTS_SUM = "segments_sum"
     GUILD = "guild"
     FACTION = "faction"
-
-HEADERS_TO_COLUMNS_NAMES = {
-    "head-speedrun-total-length": Columns.TOTAL_LENGTH,
-    "head-speedrun-segments-sum": Columns.SEGMENTS_SUM,
-}
 
 
 class TableSpeedrun(Table):
@@ -45,13 +44,6 @@ class TableSpeedrun(Table):
         *COLUMNS_ORDERED[1:],
     ]
 
-    def query_get(self, sort_by="DESC"):
-        return f'''
-        SELECT *
-        FROM [{self.name}]
-        ORDER BY {sort_by}
-        '''
-
 
 class SpeedrunDB(DB):
     def __init__(self, server: str, new=False) -> None:
@@ -60,17 +52,18 @@ class SpeedrunDB(DB):
         self.server = server
 
     def add_new_data(self, table_name: str, rows: list):
-        """
-        rows: list of [report_id, total_length, segments_sum, guild, faction]
-        """
+        """rows: list of [report_id, total_length, segments_sum, guild, faction]"""
         table = TableSpeedrun(table_name)
         self.add_new_rows(table, [tuple(row) for row in rows])
-    
+
+
+# ── API: per-boss fastest-kill grid ───────────────────────────────────────────
+
 class SpeedrunValidation(BaseModel):
     server: str
     raid: str
     mode: str = "25H"
-    sort_by: str = Columns.TOTAL_LENGTH
+    class_i: int = -1
 
     model_config = {
         "json_schema_extra": {
@@ -93,61 +86,67 @@ class SpeedrunValidation(BaseModel):
         mode = mode.upper()
         modes = ["10N", "10H", "25N", "25H"]
         if mode not in modes:
-            _list = ', '.join(modes)
-            raise ValueError(f"[boss] value value must be from [{_list}]")
+            raise ValueError(f"[mode] must be one of {modes}")
         return mode
-    
-    @field_validator("sort_by")
+
+    @field_validator('class_i')
     @classmethod
-    def validate_sort_by(cls, sort_by: str):
-        try:
-            return HEADERS_TO_COLUMNS_NAMES[sort_by]
-        except KeyError:
-            _list = ", ".join(HEADERS_TO_COLUMNS_NAMES)
-            raise ValueError(f"[sort_by] value must be from [{_list}]")
+    def validate_class_i(cls, v: int):
+        if v < -1 or v > 9:
+            raise ValueError("[class_i] must be -1 (all) or 0-9")
+        return v
 
 
-class Speedrun(SpeedrunDB, Cache):
-    cache: defaultdict[str, dict[str, DataCompressed]] = defaultdict(dict)
-
+class SpeedrunBossGrid(TopDB):
     def __init__(self, model: SpeedrunValidation) -> None:
         super().__init__(model.server)
-        self.json_query = model.model_dump_json()
-        
-        sort_by = model.sort_by
-        table_name = self.get_table_name(model.raid, model.mode)
-        table = TableSpeedrun(table_name)
-        self.query = table.query_get(sort_by)
-    
-    @running_time
-    def data(self):
-        server_data = self.cache[self.json_query]
-        if self.db_was_updated():
-            server_data.clear()
-        
-        if self.json_query not in server_data:
-            server_data[self.json_query] = self._new_compressed_data()
-            
-        return server_data[self.json_query]
-    
-    def _new_compressed_data(self):
-        a = self._new_data()
-        j = json.dumps(a, separators=(",", ":"), default=list)
-        jb = j.encode()
-        return DataCompressed(jb)
-    
-    def _new_data(self):
+        phase = get_server_phase(model.server)
+        self.encounters = [e for e in phase.ALL_BOSSES if e.raid == model.raid]
+        self.mode = model.mode
+        self.class_i = model.class_i
+
+    def get_data(self) -> DataCompressed:
+        result = {}
+        for encounter in self.encounters:
+            table_name = DB.get_table_name(encounter.name, self.mode)
+            result[encounter.name] = self._query_boss(table_name)
+        j = json.dumps(result, separators=(",", ":"))
+        return DataCompressed(j.encode())
+
+    def _query_boss(self, table_name: str) -> list:
+        if self.class_i < 0:
+            query = f"""
+            SELECT report_id, MIN(duration) AS t
+            FROM [{table_name}]
+            GROUP BY report_id
+            ORDER BY t ASC
+            LIMIT {TOP_N}
+            """
+        else:
+            spec_min = self.class_i * 4
+            spec_max = self.class_i * 4 + 3
+            query = f"""
+            SELECT report_id, MIN(duration) AS t
+            FROM [{table_name}]
+            WHERE report_id IN (
+                SELECT DISTINCT report_id FROM [{table_name}]
+                WHERE spec >= {spec_min} AND spec <= {spec_max}
+            )
+            GROUP BY report_id
+            ORDER BY t ASC
+            LIMIT {TOP_N}
+            """
         try:
-            return self.cursor.execute(self.query)
+            return self.cursor.execute(query).fetchall()
         except sqlite3.OperationalError:
             return []
 
 
 def test1():
     sv = SpeedrunValidation(**API_EXAMPLES[0])
-    data = Speedrun(sv)._new_data()
-    for x in data:
-        print(x)
+    grid = SpeedrunBossGrid(sv)
+    for boss, rows in json.loads(grid.get_data().data).items():
+        print(f"{boss}: {rows[:2]}")
 
 if __name__ == "__main__":
     test1()

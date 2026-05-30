@@ -13,7 +13,7 @@ from top_character import Character, CharacterValidation
 from top_points import Points, PointsValidation
 from top_pve_stats import PveStats, PveStatsValidation, SPECS_DATA_NOT_IGNORED
 from top_raid_rank import RaidRank, RaidRankValidation
-from top_speedrun import Speedrun, SpeedrunValidation
+from top_speedrun import SpeedrunBossGrid, SpeedrunValidation
 
 top_bp = Blueprint("top", __name__)
 
@@ -61,9 +61,9 @@ def top_points():
 def top_speedrun():
     data = SpeedrunValidation(**_body())
     try:
-        return _compressed_response(Speedrun(data).data())
+        return _compressed_response(SpeedrunBossGrid(data).get_data())
     except FileNotFoundError:
-        return _compressed_response(DataCompressed(b'[]'))
+        return _compressed_response(DataCompressed(b'{}'))
 
 
 @top_bp.route("/pve_stats", methods=["POST"])
