@@ -49,6 +49,7 @@ class FileNames(StrEnum):
     logs_cut = "LOGS_CUT.zstd"
     logs_cut_old = "LOGS_CUT.zlib"
     logs_top = "top.json"
+    logs_speedrun = "speedrun.json"
     logs_guids_data = "GUIDS_DATA.json"
     logs_players_data = "PLAYERS_DATA.json"
     logs_classes_data = "CLASSES_DATA.json"

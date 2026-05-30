@@ -51,26 +51,18 @@ class TableSpeedrun(Table):
         '''
 
 
-def new_db_row(s: str):
-    total_length, segments_sum, report_id = s.split('--', 2)
-    report_id = report_id.rsplit("--", 1)[0]
-    total_length = float(total_length)
-    segments_sum = float(segments_sum)
-    return report_id, total_length, segments_sum
-
 class SpeedrunDB(DB):
     def __init__(self, server: str, new=False) -> None:
         path = Directories.speedrun / f"{server}.db"
-        super().__init__(
-            path,
-            new=new,
-        )
+        super().__init__(path, new=new)
         self.server = server
 
-    def add_new_data(self, table_name: str, data: list[str]):
+    def add_new_data(self, table_name: str, rows: list):
+        """
+        rows: list of [report_id, total_length, segments_sum, guild, faction]
+        """
         table = TableSpeedrun(table_name)
-        rows = list(map(new_db_row, data))
-        self.add_new_rows(table, rows)
+        self.add_new_rows(table, [tuple(row) for row in rows])
     
 class SpeedrunValidation(BaseModel):
     server: str

@@ -16,7 +16,9 @@ from time import perf_counter
 import api_7z
 import api_top_db_v2
 import logs_calendar
+import logs_speedrun
 import logs_top
+import top_speedrun
 from constants import DEFAULT_SERVER_NAME
 from c_path import Directories, FileNames
 from h_debug import Loggers, get_ms_str
@@ -133,6 +135,31 @@ def make_top_data(new_logs: list[str], processes: int=1):
         if not done
     )
 
+def make_speedrun_data(new_logs: list[str], processes: int=1):
+    if processes > 1:
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            executor.map(logs_speedrun.make_report_speedrun_wrap, new_logs)
+    else:
+        for report_id in new_logs:
+            logs_speedrun.make_report_speedrun_wrap(report_id)
+
+def add_new_speedrun_data(server: str, reports):
+    pc = perf_counter()
+    _data: dict[str, list] = defaultdict(list)
+    for report_id in reports:
+        speedrun_file = Directories.logs.joinpath(report_id, FileNames.logs_speedrun)
+        if not speedrun_file.is_file():
+            continue
+        speedrun_data = speedrun_file.json()
+        for table_name, row in speedrun_data.items():
+            _data[table_name].append(row)
+
+    if _data:
+        db = top_speedrun.SpeedrunDB(server, new=True)
+        for table_name, rows in _data.items():
+            db.add_new_data(table_name, rows)
+        LOGGER.debug(f'{get_ms_str(pc)} | Saved speedrun | {server}')
+
 def add_to_archives(new_logs: list[str], processes: int=1):
     api_7z.SevenZip().download()
 
@@ -174,10 +201,14 @@ def main(multiprocessing=True):
     errors = make_top_data(NEW_LOGS, MAX_CPU)
     remove_errors(NEW_LOGS, errors, func="make_top_data")
 
+    make_speedrun_data(NEW_LOGS, MAX_CPU)
+
     errors = set()
     for server, reports in group_reports_by_server(NEW_LOGS):
+        reports = list(reports)
         new_errors = add_new_top_data(server, reports)
         errors.update(new_errors)
+        add_new_speedrun_data(server, reports)
 
     remove_errors(NEW_LOGS, errors, func="add_new_top_data")
 
