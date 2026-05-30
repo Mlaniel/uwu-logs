@@ -11,6 +11,7 @@ from api_db import (
 )
 from c_path import Directories, StrEnum
 from h_debug import running_time
+from h_server_fix import get_servers
 
 
 API_EXAMPLES = [
@@ -79,11 +80,7 @@ class SpeedrunValidation(BaseModel):
     @field_validator('server')
     @classmethod
     def validate_server(cls, server: str):
-        servers = sorted((
-            file.stem
-            for file in Directories.speedrun.files
-            if file.suffix == ".db"
-        ))
+        servers = get_servers()
         if server not in servers:
             _list = ', '.join(servers)
             raise ValueError(f"[server] value must be from [{_list}]")
