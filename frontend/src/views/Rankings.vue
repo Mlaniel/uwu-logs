@@ -295,7 +295,7 @@ async function fetchServers() {
 async function fetchRankings() {
   const key = queryKey.value
   if (!selServer.value) return
-  if (mode.value !== 'speedrun' && !selBoss.value) return
+  if (mode.value === 'dps' && !selBoss.value) return
   if (mode.value === 'points' && (selClass.value < 0 || selSpec.value < 1)) return
 
   // Cache hit

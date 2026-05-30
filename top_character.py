@@ -72,19 +72,21 @@ class Character(TopDB):
             spec_i = DEFAULT_SPEC[self.info.class_i]
         spec_i += self.info.class_i * 4
 
+        self.spec_i = spec_i
         self.points_cache = PointsServer(model.server).get_spec_data(spec_i)
 
     @running_time
     def get_player_data(self):
         return {
             "class_i": self.info.class_i,
+            "spec_i": self.spec_i,
             "name": self.info.name,
             "server": self.server,
             "overall_points": self._overall_points(),
             "overall_rank": self._overall_rank(),
             "bosses": self._bosses(),
         }
-    
+
     def _overall_rank(self):
         return self.points_cache.get_player_rank(self.info.guid)
 
@@ -92,7 +94,8 @@ class Character(TopDB):
         return self.points_cache.get_player_overall_points(self.info.guid)
 
     def _bosses(self):
-        d = {}
+        groups: dict[str, dict] = {}
+        for_points_tables = {e.table_name for e in self.points_cache.phase.FOR_POINTS}
         for encounter in self.points_cache.phase.ALL_BOSSES:
             boss_data_by_spec = self.points_cache[encounter.table_name]
             data = boss_data_by_spec.player_data(self.info.guid)
@@ -102,9 +105,13 @@ class Character(TopDB):
                 duration, report_id = self.cursor.execute(query).fetchone()
                 data["fastest_kill_duration"] = duration
                 data["report_id"] = f"{report_id}--{self.server}"
-            d[encounter.name] = data
+            data["is_for_points"] = encounter.table_name in for_points_tables
+            raid = encounter.raid or ""
+            if raid not in groups:
+                groups[raid] = {}
+            groups[raid][encounter.name] = data
 
-        return d
+        return groups
 
 
 def _test1():

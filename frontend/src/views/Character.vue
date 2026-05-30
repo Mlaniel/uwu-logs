@@ -71,6 +71,19 @@ onMounted(async () => {
 
 const CLASSES = ["Death Knight", "Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"]
 
+const SPECS_BY_CLASS: Record<string, string[]> = {
+  "Death Knight": ["Blood", "Frost", "Unholy"],
+  "Druid":        ["Balance", "Feral Combat", "Restoration"],
+  "Hunter":       ["Beast Mastery", "Marksmanship", "Survival"],
+  "Mage":         ["Arcane", "Fire", "Frost"],
+  "Paladin":      ["Holy", "Protection", "Retribution"],
+  "Priest":       ["Discipline", "Holy", "Shadow"],
+  "Rogue":        ["Assassination", "Combat", "Subtlety"],
+  "Shaman":       ["Elemental", "Enhancement", "Restoration"],
+  "Warlock":      ["Affliction", "Demonology", "Destruction"],
+  "Warrior":      ["Arms", "Fury", "Protection"],
+}
+
 function className(classI: number): string {
   return CLASSES[classI] ?? 'Unknown'
 }
@@ -79,14 +92,26 @@ function classSlug(classI: number): string {
   return (CLASSES[classI] ?? '').toLowerCase().replace(' ', '-')
 }
 
+function specName(specI: number): string {
+  const classI = Math.floor(specI / 4)
+  const s = specI % 4
+  if (!s) return CLASSES[classI] ?? 'Unknown'
+  return SPECS_BY_CLASS[CLASSES[classI]]?.[s - 1] ?? 'Unknown'
+}
+
 function fmtPoints(v: number): string {
   if (v === null || v === undefined) return '-'
   return typeof v === 'number' ? v.toFixed(2) : String(v)
 }
 
-function bossList(data: any): Array<[string, any]> {
+function reportLink(data: any): string | null {
+  const id = data?.report_id
+  return id ? `/reports/${id}/` : null
+}
+
+function raidGroups(data: any): Array<[string, Array<[string, any]>]> {
   if (!data?.bosses) return []
-  return Object.entries(data.bosses)
+  return Object.entries(data.bosses).map(([raid, bosses]) => [raid, Object.entries(bosses as any)])
 }
 </script>
 
@@ -123,7 +148,9 @@ function bossList(data: any): Array<[string, any]> {
       <template v-else-if="charData">
         <div class="char-header">
           <span :class="`char-name cls-${classSlug(charData.class_i)}`">{{ inputName }}</span>
-          <span class="char-meta">{{ className(charData.class_i) }} &mdash; {{ inputServer }}</span>
+          <span class="char-meta">
+            {{ className(charData.class_i) }} &mdash; {{ specName(charData.spec_i) }} &mdash; {{ inputServer }}
+          </span>
           <div class="char-overall">
             <span class="stat-label">Overall rank</span>
             <span class="stat-val">{{ charData.overall_rank ?? '-' }}</span>
@@ -132,22 +159,39 @@ function bossList(data: any): Array<[string, any]> {
           </div>
         </div>
 
-        <table v-if="bossList(charData).length" class="boss-table">
-          <thead>
-            <tr>
-              <th>Boss</th>
-              <th class="th-num">Rank</th>
-              <th class="th-num">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="([boss, info]) in bossList(charData)" :key="boss" class="boss-row">
-              <td class="td-boss">{{ boss }}</td>
-              <td class="td-num">{{ info?.rank ?? '-' }}</td>
-              <td class="td-num">{{ info?.points !== undefined ? fmtPoints(info.points) : '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <template v-if="raidGroups(charData).length">
+          <div v-for="([raid, bosses]) in raidGroups(charData)" :key="raid" class="raid-group">
+            <div v-if="raid" class="raid-label">{{ raid }}</div>
+            <table class="boss-table">
+              <thead>
+                <tr>
+                  <th>Boss</th>
+                  <th class="th-num">Rank</th>
+                  <th class="th-num">Points</th>
+                  <th class="th-raid">Raid</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="([boss, info]) in bosses"
+                  :key="boss"
+                  class="boss-row"
+                  :class="{ 'row-other': !info?.is_for_points }"
+                >
+                  <td class="td-boss">{{ boss }}</td>
+                  <td class="td-num">{{ info?.rank_players ?? '-' }}</td>
+                  <td class="td-num">{{ info?.points !== undefined ? fmtPoints(info.points) : '-' }}</td>
+                  <td class="td-raid">
+                    <a v-if="reportLink(info)" :href="reportLink(info)!" target="_blank" class="raid-link">
+                      {{ info.report_id?.split('--')[0] }}
+                    </a>
+                    <span v-else class="td-muted">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
 
         <p v-else class="empty-msg">No boss data available.</p>
       </template>
@@ -303,6 +347,20 @@ function bossList(data: any): Array<[string, any]> {
 }
 
 /* ── Boss table ──────────────────────────────────────────── */
+.raid-group {
+  margin-bottom: 1.5rem;
+}
+
+.raid-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
 .boss-table {
   width: 100%;
   border-collapse: collapse;
@@ -325,6 +383,11 @@ function bossList(data: any): Array<[string, any]> {
   text-align: right;
 }
 
+.th-raid, .td-raid {
+  text-align: right;
+  white-space: nowrap;
+}
+
 .boss-row {
   height: 34px;
   border-bottom: 1px solid var(--table-border);
@@ -340,6 +403,25 @@ function bossList(data: any): Array<[string, any]> {
 
 .td-boss {
   color: var(--text);
+}
+
+.row-other .td-boss {
+  color: var(--text-muted);
+}
+
+.td-muted {
+  color: var(--text-muted);
+}
+
+.raid-link {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.raid-link:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 /* Class colours */

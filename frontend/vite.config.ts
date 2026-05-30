@@ -39,7 +39,8 @@ export default defineConfig({
       '/character': {
         target: 'http://localhost:5000',
         bypass(req) {
-          return req.method === 'GET' && req.url === '/character' ? req.url : null
+          const pathname = req.url?.split('?')[0]
+          return req.method === 'GET' && pathname === '/character' ? req.url : null
         },
       },
     },

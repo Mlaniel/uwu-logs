@@ -4,9 +4,10 @@ from api_top_db_v2 import Columns, DB
 
 
 class Encounter:
-    def __init__(self, name: str, mode: str = "25H") -> None:
+    def __init__(self, name: str, mode: str = "25H", raid: str = "") -> None:
         self.name = name
         self.mode = mode
+        self.raid = raid
         self.table_name = DB.get_table_name(name, mode)
 
     def __str__(self):
@@ -62,23 +63,30 @@ class Tier_10:
         Encounter("Blood-Queen Lana'thel"),
         Encounter("Valithria Dreamwalker"),
     )
+    _ICC = "Icecrown Citadel"
+    _RS  = "The Ruby Sanctum"
+    _TOC = "Trial of the Crusader"
+    _VOA = "Vault of Archavon"
     FOR_POINTS = (
-        Encounter("Lord Marrowgar"),
-        Encounter("Lady Deathwhisper"),
-        Encounter("Deathbringer Saurfang"),
-        Encounter("Festergut"),
-        Encounter("Rotface"),
-        Encounter("Professor Putricide"),
-        Encounter("Blood Prince Council"),
-        Encounter("Blood-Queen Lana'thel"),
-        Encounter("Sindragosa"),
-        Encounter("The Lich King"),
+        Encounter("Lord Marrowgar",           raid=_ICC),
+        Encounter("Lady Deathwhisper", "25N", raid=_ICC),
+        Encounter("Deathbringer Saurfang",    raid=_ICC),
+        Encounter("Festergut",                raid=_ICC),
+        Encounter("Rotface",                  raid=_ICC),
+        Encounter("Professor Putricide","25N",raid=_ICC),
+        Encounter("Blood Prince Council",     raid=_ICC),
+        Encounter("Blood-Queen Lana'thel",    raid=_ICC),
+        Encounter("Sindragosa", "25N",        raid=_ICC),
+        Encounter("The Lich King", "25N",     raid=_ICC),
+        Encounter("Halion", "25N",            raid=_RS),
     )
     OTHER = (
-        Encounter("Toravon the Ice Watcher", "25N"),
-        Encounter("Halion"),
-        Encounter("Anub'arak"),
-        Encounter("Valithria Dreamwalker"),
+        Encounter("Toravon the Ice Watcher", "25N", raid=_VOA),
+        Encounter("Anub'arak",                      raid=_TOC),
+        Encounter("Valithria Dreamwalker",          raid=_ICC),
+        Encounter("Baltharus the Warborn", "25N",   raid=_RS),
+        Encounter("Saviana Ragefire", "25N",        raid=_RS),
+        Encounter("General Zarithrian", "25N",      raid=_RS),
     )
     ALL_BOSSES = FOR_POINTS + OTHER
 
